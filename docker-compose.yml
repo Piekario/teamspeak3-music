@@ -1,0 +1,74 @@
+# Base stack: the bot, the PO-token provider and the web UI.
+#
+# The per-bot TeamSpeak client containers live in docker-compose.instances.yml, generated
+# from instances.json by `pnpm instances:generate`. Bring the whole thing up with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
+#
+# The architectural split that matters: only the TeamSpeak client containers are emulated
+# (linux/amd64, no arm64 build exists). The bot — and therefore ffmpeg — stays native and
+# reaches each client's PulseAudio over TCP.
+
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: docker/bot/Dockerfile
+    image: tsmusic/bot:0.1.0
+    container_name: tsmusic-bot
+    restart: unless-stopped
+    environment:
+      HTTP_PORT: "8080"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:?ADMIN_TOKEN must be set — generate one with: openssl rand -hex 32}"
+      DATABASE_PATH: /data/tsmusic.db
+      INSTANCES_FILE: /config/instances.json
+      YTDLP_BINARY: yt-dlp
+      YTDLP_AUTO_UPDATE: "${YTDLP_AUTO_UPDATE:-true}"
+      YTDLP_POT_PROVIDER_URL: http://pot-provider:4416
+      FFMPEG_BINARY: ffmpeg
+      PACTL_BINARY: pactl
+    volumes:
+      - bot-data:/data
+      # yt-dlp lives in a volume so it can be updated without an image rebuild.
+      - ytdlp:/opt/ytdlp
+      # Read-only: the bot reads its instance list, it never rewrites it.
+      - ./instances.json:/config/instances.json:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - tsmusic
+
+  # Supplies PO tokens to yt-dlp. Datacenter IPs get challenged by YouTube; this reduces
+  # how often, though nothing eliminates it — cookies remain the stronger lever.
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: tsmusic-pot-provider
+    init: true
+    restart: unless-stopped
+    expose:
+      - "4416"
+    networks:
+      - tsmusic
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    image: tsmusic/web:0.1.0
+    container_name: tsmusic-web
+    restart: unless-stopped
+    depends_on:
+      - bot
+    ports:
+      - "8081:80"
+    networks:
+      - tsmusic
+
+volumes:
+  bot-data: {}
+  ytdlp: {}
+
+networks:
+  tsmusic:
+    name: tsmusic

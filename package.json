@@ -1,0 +1,22 @@
+{
+  "name": "teamspeak3-music",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "tsc -b --pretty",
+    "dev:backend": "pnpm --filter @tsmusic/backend dev",
+    "dev:frontend": "pnpm --filter @tsmusic/frontend dev",
+    "instances:generate": "node scripts/gen-instances.mjs",
+    "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

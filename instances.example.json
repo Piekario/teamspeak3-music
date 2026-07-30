@@ -1,0 +1,63 @@
+{
+  "$comment": [
+    "Copy to instances.json (gitignored — it holds ClientQuery API keys), edit, then run:",
+    "  pnpm instances:generate && docker compose up -d",
+    "",
+    "Each entry becomes its own ts3-client container: its own TeamSpeak identity, its own",
+    "PulseAudio sink and its own ClientQuery socket. Bots are fully independent, so two",
+    "entries may point at completely different TeamSpeak servers.",
+    "",
+    "apiKey is obtained once per instance through the VNC bootstrap — see README."
+  ],
+  "instances": [
+    {
+      "id": "party",
+      "name": "Party Bot",
+      "enabled": true,
+      "teamspeak": {
+        "host": "ts.example.com",
+        "port": 9987,
+        "nickname": "PartyBot",
+        "channel": "Music",
+        "homeChannelId": null
+      },
+      "serverPassword": null,
+      "clientQuery": {
+        "apiKey": "AAAA-BBBB-CCCC-DDDD-EEEE"
+      },
+      "playback": {
+        "defaultVolume": 40,
+        "maxTrackSeconds": 900,
+        "maxPerUser": 10,
+        "allowLiveStreams": false
+      },
+      "commands": {
+        "prefix": "!",
+        "requireSameChannel": true
+      },
+      "permissions": {
+        "defaultRole": "user",
+        "whitelistOnly": false
+      }
+    },
+    {
+      "id": "chill",
+      "name": "Chill Bot",
+      "enabled": false,
+      "teamspeak": {
+        "host": "other-server.example.com",
+        "port": 9987,
+        "nickname": "ChillBot",
+        "channel": "Lounge",
+        "homeChannelId": null
+      },
+      "serverPassword": null,
+      "clientQuery": {
+        "apiKey": "FFFF-GGGG-HHHH-IIII-JJJJ"
+      },
+      "commands": {
+        "prefix": "."
+      }
+    }
+  ]
+}

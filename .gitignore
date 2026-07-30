@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# Generated from instances.json by scripts/gen-instances.mjs
+docker-compose.instances.yml
+instances.json
+
+# Local SQLite data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Backups of the ts3-config volume (identity + ClientQuery API key — never commit)
+*.tgz
+
+.DS_Store
+*.log

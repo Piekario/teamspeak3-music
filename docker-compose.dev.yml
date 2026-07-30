@@ -1,0 +1,33 @@
+# Development overrides.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.instances.yml -f docker-compose.dev.yml up -d
+#
+# Adds a local TeamSpeak server to develop against, and opens the ports that production
+# deliberately keeps closed.
+
+services:
+  # A throwaway TeamSpeak server so development needs nobody else's. Also amd64-only, but
+  # it is a cheap process — unlike the Qt client, emulating it costs nothing noticeable.
+  ts3server:
+    image: teamspeak:latest
+    platform: linux/amd64
+    container_name: tsmusic-ts3server
+    environment:
+      TS3SERVER_LICENSE: accept
+    ports:
+      - "9987:9987/udp"
+      - "30033:30033"
+    volumes:
+      - ts3server-data:/var/ts3server
+    networks:
+      - tsmusic
+
+  bot:
+    environment:
+      LOG_LEVEL: debug
+    # Reach the client containers' ClientQuery and PulseAudio from the host while debugging.
+    ports:
+      - "8080:8080"
+
+volumes:
+  ts3server-data: {}

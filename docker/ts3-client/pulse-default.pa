@@ -1,0 +1,30 @@
+#!/usr/bin/pulseaudio -nF
+#
+# PulseAudio layout for one bot instance.
+#
+# The chain is: ffmpeg -> bot_sink -> bot_sink.monitor -> bot_mic -> TeamSpeak capture.
+#
+# `module-remap-source` is not decorative. The TeamSpeak client's capture-device picker
+# frequently refuses to list raw `.monitor` sources; wrapping the monitor in a remap-source
+# makes it appear as a first-class input device. Without it the device list looks empty and
+# the cause is entirely non-obvious.
+
+.fail
+
+# Unix socket for local clients (the TeamSpeak client itself).
+load-module module-native-protocol-unix auth-anonymous=1
+
+# TCP so the bot container — which stays on the native architecture — can reach this
+# PulseAudio from outside. This is what keeps ffmpeg off the emulated CPU, and it is also
+# what allows the client container to live on a remote host entirely.
+load-module module-native-protocol-tcp listen=0.0.0.0 port=4713 auth-anonymous=1 auth-ip-acl=127.0.0.1;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16
+
+# The sink ffmpeg writes into. 48 kHz stereo throughout: TeamSpeak's Opus Music codec wants
+# 48 kHz, and letting a 44.1 kHz stream through means PulseAudio resamples it on the fly.
+load-module module-null-sink sink_name=bot_sink rate=48000 channels=2 sink_properties=device.description="BotSink"
+
+# The virtual microphone TeamSpeak captures from.
+load-module module-remap-source source_name=bot_mic master=bot_sink.monitor source_properties=device.description="BotMic"
+
+set-default-sink bot_sink
+set-default-source bot_mic
