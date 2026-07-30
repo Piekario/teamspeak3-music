@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-900 text-slate-100 antialiased;
+  }
+
+  /* The panel is a control surface that tends to sit open on a second screen for hours,
+     so it commits to a dark theme rather than following the OS. */
+  code {
+    @apply rounded bg-slate-800 px-1 py-0.5 font-mono text-[0.9em];
+  }
+}

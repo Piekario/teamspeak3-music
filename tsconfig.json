@@ -1,4 +1,4 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/shared" }, { "path": "./packages/backend" }]
+  "references": [{ "path": "./packages/shared" }, { "path": "./packages/backend" }, { "path": "./packages/frontend" }]
 }
