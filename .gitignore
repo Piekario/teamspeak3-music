@@ -21,3 +21,7 @@ data/
 
 .DS_Store
 *.log
+
+# .NET build output
+bin/
+obj/

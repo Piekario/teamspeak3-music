@@ -1,0 +1,3 @@
+[submodule "vendor/TS3AudioBot"]
+	path = vendor/TS3AudioBot
+	url = https://github.com/Splamy/TS3AudioBot.git

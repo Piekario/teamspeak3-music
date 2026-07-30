@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- TSLib multi-targets netstandard2.0/2.1, so a current runtime can reference it even
+         though TS3AudioBot itself still ships against .NET Core 3.1. -->
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <RootNamespace>TsMusic.Gateway</RootNamespace>
+    <!-- TSLib is vendored source, not a published package; its own build emits warnings we
+         neither own nor want failing our build. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../vendor/TS3AudioBot/TSLib/TSLib.csproj" />
+  </ItemGroup>
+
+</Project>
