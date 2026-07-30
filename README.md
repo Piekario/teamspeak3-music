@@ -175,6 +175,15 @@ the connect settings live in the config volume. Check `docker logs tsmusic-clien
 **Volume changes feel non-linear or have no effect.** Automatic voice gain is still on in the
 client. See the bootstrap table above.
 
+**The bot is connected and the queue is playing, but nobody hears anything.** Check that the
+bot's output is not muted. TeamSpeak mutes the microphone along with the speakers, so an
+output-muted bot transmits nothing — and it looks perfectly healthy while doing it. The bot
+does not need to be muted: it cannot relay other people's voices because the client plays
+into `bot_void`, a sink whose monitor feeds nothing.
+
+Note that `client_flag_talking` is not a reliable check here — it was observed reading `0`
+while audio was genuinely being transmitted. Trust your ears, or `pactl list sink-inputs`.
+
 **`yt-dlp` suddenly fails on everything.** YouTube changed extraction. In order of effort:
 update yt-dlp (it lives in a volume, no rebuild needed), then supply `YTDLP_COOKIES_FILE`
 from a logged-in browser, then try `YTDLP_EXTRACTOR_ARGS`. The bot reports yt-dlp's own error

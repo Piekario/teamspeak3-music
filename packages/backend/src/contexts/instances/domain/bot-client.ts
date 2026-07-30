@@ -29,11 +29,10 @@ export interface BotClient {
   setNickname(nickname: string): Promise<void>;
 
   /**
-   * Muting the bot's speakers is not cosmetic. The client has only an ALSA backend and plays
-   * to PulseAudio's default sink; if anything the bot hears were routed into the sink that
-   * feeds its own microphone, it would retransmit every speaker in the channel. The sink
-   * layout prevents that structurally — this is the second line of defence, and it also
-   * spares the bot from decoding audio nobody will ever hear.
+   * Beware: in TeamSpeak, muting the output mutes the microphone as well. Muting a music
+   * bot's speakers therefore silences the music, which is why the runtime explicitly keeps
+   * output unmuted. Preventing the bot from relaying other people's voices is the audio
+   * routing's job — the client plays into a sink whose monitor feeds nothing.
    */
   setOutputMuted(muted: boolean): Promise<void>;
   setInputMuted(muted: boolean): Promise<void>;

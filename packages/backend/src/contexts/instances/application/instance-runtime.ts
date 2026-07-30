@@ -218,14 +218,17 @@ export class InstanceRuntime {
       });
     }
 
-    // The bot joins deaf and speaking. It has nothing to listen to — muting its output is
-    // what guarantees it can never relay other people's voices back into the channel, and it
-    // also tells everyone at a glance that the bot is not listening in.
-    await this.#bot.setOutputMuted(true).catch((error: unknown) => {
-      this.#deps.logger.warn('could not mute bot output', {
-        instance: this.#config.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    // The bot must NOT mute its output, however tempting that looks for a client that has
+    // nothing to listen to. TeamSpeak treats muted speakers as muting the microphone too, so
+    // an output-muted bot transmits nothing at all and goes silently, confusingly dead.
+    // Verified the hard way: with output muted a tone played into the sink was inaudible in
+    // the channel, and became audible the moment the mute was lifted.
+    //
+    // Nothing is lost by leaving it unmuted. The bot cannot relay other people's voices
+    // because the client's playback goes to `bot_void`, a sink whose monitor feeds nothing —
+    // the feedback loop is prevented by the audio routing, not by a mute flag.
+    await this.#bot.setOutputMuted(false).catch(() => {
+      // Non-fatal: the routing already guarantees nothing is relayed.
     });
     await this.#bot.setInputMuted(false).catch(() => {
       // Its microphone is the music; if this fails the audio simply will not be heard.
