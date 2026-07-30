@@ -16,6 +16,17 @@ import type {
 } from '../domain/ports.ts';
 import { ClientUid, Volume } from '../domain/values.ts';
 
+/**
+ * A request is either a URL or a search phrase. `undefined` is written explicitly because
+ * the caller is usually a parsed request body, where an absent field is present-and-undefined
+ * rather than missing.
+ */
+export interface TrackRequest {
+  readonly url?: string | undefined;
+  readonly query?: string | undefined;
+  readonly position?: number | undefined;
+}
+
 export type PlayRequestError = ResolveError | EnqueueError | { readonly kind: 'playback/no-resolver'; readonly url: string };
 export type ControlError = { readonly kind: 'playback/nothing-playing' } | { readonly kind: 'playback/illegal-transition' };
 
@@ -77,7 +88,7 @@ export class PlaybackService {
    * than a guess — a ten-hour livestream is refused up front, not after it starts.
    */
   async request(
-    input: { readonly url?: string; readonly query?: string; readonly position?: number },
+    input: TrackRequest,
     requester: Requester,
   ): Promise<Result<Track, PlayRequestError>> {
     const resolved = await this.#resolveInput(input);
@@ -220,10 +231,7 @@ export class PlaybackService {
 
   // ─── internals ────────────────────────────────────────────────────────────
 
-  async #resolveInput(input: {
-    readonly url?: string;
-    readonly query?: string;
-  }): Promise<Result<Track, PlayRequestError>> {
+  async #resolveInput(input: TrackRequest): Promise<Result<Track, PlayRequestError>> {
     if (input.url !== undefined) {
       const resolver = this.#options.resolvers.find((candidate) => candidate.supports(input.url as string));
       if (resolver === undefined) return err({ kind: 'playback/no-resolver', url: input.url });
