@@ -1,5 +1,11 @@
 import type { AppEvent, ConnectionState } from '@tsmusic/shared';
 
+/** The payload of an `instance.status` event, kept as a type so it can be cached. */
+export type InstanceStatusPayload = Extract<
+  AppEvent,
+  { type: 'instance.status' }
+>['payload'];
+
 import type { Clock } from '../../../shared-kernel/clock.ts';
 import type { EventPublisher } from '../../../shared-kernel/event-bus.ts';
 import { PermissionResolver } from '../../access/domain/permission-resolver.ts';
@@ -58,6 +64,18 @@ export class InstanceRuntime {
   #config: InstanceConfig;
   #connectionState: ConnectionState = 'disconnected';
   #connectionError: string | null = null;
+  /**
+   * The last status broadcast, kept so a client connecting later can be handed the current
+   * picture. Status events fire on change, so without this a panel opened after the bot came
+   * up would sit showing "disconnected" — with every control disabled — until something
+   * happened to change the state.
+   */
+  #lastStatus: InstanceStatusPayload = {
+    connection: 'disconnected',
+    error: null,
+    channel: null,
+    clients: [],
+  };
 
   constructor(deps: InstanceRuntimeDependencies) {
     this.#deps = deps;
@@ -185,6 +203,11 @@ export class InstanceRuntime {
     return this.#connectionState;
   }
 
+  /** Current status, for handing to a client that connects after the fact. */
+  get status(): InstanceStatusPayload {
+    return this.#lastStatus;
+  }
+
   start(): void {
     if (!this.#config.enabled) {
       this.#deps.logger.info('instance disabled, not connecting', { instance: this.#config.id });
@@ -279,17 +302,18 @@ export class InstanceRuntime {
         : Promise.resolve([]),
     ]);
 
-    const event: AppEvent = {
+    this.#lastStatus = {
+      connection: this.#connectionState,
+      error: this.#connectionError,
+      channel,
+      clients,
+    };
+
+    this.#deps.events.publish({
       type: 'instance.status',
       instanceId: this.#config.id,
       at: this.#deps.clock.now().toISOString(),
-      payload: {
-        connection: this.#connectionState,
-        error: this.#connectionError,
-        channel,
-        clients,
-      },
-    };
-    this.#deps.events.publish(event);
+      payload: this.#lastStatus,
+    });
   }
 }

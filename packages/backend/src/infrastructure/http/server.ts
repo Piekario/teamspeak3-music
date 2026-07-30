@@ -67,14 +67,28 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
     // Push a full snapshot immediately, so the panel never renders an empty shell while it
     // waits for something to happen.
+    //
+    // The instance status matters as much as the player state here. Status events fire only
+    // on change, so a panel opened after the bots came up would otherwise show every one of
+    // them as disconnected — with all controls disabled — until something happened to change
+    // it, which on a healthy system could be hours.
+    const at = options.clock.now().toISOString();
     hub.sendTo(
       client,
-      options.instances.all.map((runtime) => ({
-        type: 'player.state' as const,
-        instanceId: runtime.id,
-        at: options.clock.now().toISOString(),
-        payload: runtime.playback.session.toPlayerState(),
-      })),
+      options.instances.all.flatMap((runtime) => [
+        {
+          type: 'instance.status' as const,
+          instanceId: runtime.id,
+          at,
+          payload: runtime.status,
+        },
+        {
+          type: 'player.state' as const,
+          instanceId: runtime.id,
+          at,
+          payload: runtime.playback.session.toPlayerState(),
+        },
+      ]),
     );
 
     socket.on('close', () => hub.remove(client));
