@@ -112,5 +112,25 @@ if [[ "${TS3_SEED_AUDIO_PROFILE:-true}" == "true" ]]; then
   chown ts3:ts3 "${SETTINGS_DB}"
 fi
 
+# The ClientQuery plugin binds to 127.0.0.1 unless `open_remote` is set, so by default it is
+# reachable only from inside this container — and the bot runs in a different one. Without
+# this the backend connects to nothing and retries forever with a growing backoff.
+#
+# The port is `expose`d rather than published, so it stays on the compose network; anyone who
+# can reach it still needs the API key. Do not publish 25639 to the host.
+CLIENTQUERY_INI="${CONFIG_DIR}/clientquery.ini"
+if [[ -f "${CLIENTQUERY_INI}" ]]; then
+  if grep -q '^open_remote=' "${CLIENTQUERY_INI}"; then
+    sed -i 's/^open_remote=.*/open_remote=true/' "${CLIENTQUERY_INI}"
+  else
+    printf '\nopen_remote=true\n' >> "${CLIENTQUERY_INI}"
+  fi
+else
+  # Written before the plugin's first run; it fills in api_key and keeps this setting.
+  printf '[General]\nopen_remote=true\n' > "${CLIENTQUERY_INI}"
+fi
+chown ts3:ts3 "${CLIENTQUERY_INI}"
+log 'ClientQuery set to accept connections from the compose network'
+
 log "starting supervisord (VNC=${ENABLE_VNC:-false})"
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/ts3.conf

@@ -6,15 +6,21 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable
 
-COPY pnpm-workspace.yaml package.json tsconfig.base.json tsconfig.json ./
+# The lockfile is what makes `--frozen-lockfile` meaningful: without it the build would
+# either fail outright or silently resolve different dependency versions than the ones
+# tested here.
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend/package.json packages/backend/
 RUN pnpm install --frozen-lockfile --filter @tsmusic/shared --filter @tsmusic/backend
 
 COPY packages/shared packages/shared
 COPY packages/backend packages/backend
+# No `pnpm prune --prod` here: it prompts interactively ("modules will be removed and
+# reinstalled from scratch"), which has no place in a build, and it reinstalls the whole
+# tree to save space that a self-hosted bot does not need.
 RUN pnpm --filter @tsmusic/shared build && pnpm --filter @tsmusic/backend build \
- && pnpm prune --prod
+ && test -d packages/shared/dist && test -d packages/backend/dist
 
 FROM node:22-bookworm-slim
 
@@ -33,12 +39,13 @@ RUN mkdir -p /opt/ytdlp \
  && pip3 install --break-system-packages --target /opt/ytdlp yt-dlp
 
 WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/shared/dist ./packages/shared/dist
-COPY --from=build /app/packages/shared/package.json ./packages/shared/
-COPY --from=build /app/packages/backend/dist ./packages/backend/dist
-COPY --from=build /app/packages/backend/package.json ./packages/backend/
-COPY --from=build /app/node_modules/.pnpm ./node_modules/.pnpm
+
+# The whole tree is copied in one piece rather than cherry-picking dist and package.json.
+# pnpm's layout is a web of symlinks — each package has its own node_modules pointing into
+# the root .pnpm store — and reproducing that path by path produced an image that resolved
+# its own package.json but not its dependencies. Copying wholesale keeps every link intact;
+# the extra weight is the TypeScript sources, which is not a price worth optimising here.
+COPY --from=build /app ./
 
 EXPOSE 8080
 

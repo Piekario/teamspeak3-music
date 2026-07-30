@@ -1,0 +1,31 @@
+# Without this, the whole workspace — including several hundred megabytes of node_modules
+# and the entire git history — is uploaded as build context on every build.
+node_modules
+**/node_modules
+dist
+**/dist
+# Both forms are needed: a bare `*.tsbuildinfo` matches only the root. Letting a stale one
+# through is silently destructive — `tsc -b` trusts it, decides everything is up to date,
+# emits nothing, and the image build then fails on a missing dist that was never written.
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+.git
+.github
+
+# Secrets must never reach an image layer, where they would survive in the history even if
+# a later layer deleted them.
+.env
+.env.*
+!.env.example
+instances.json
+*.tgz
+
+data
+*.db
+*.db-wal
+*.db-shm
+
+.DS_Store
+*.log
+docker-compose.instances.yml

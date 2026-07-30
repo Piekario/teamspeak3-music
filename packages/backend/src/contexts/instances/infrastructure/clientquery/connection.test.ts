@@ -282,6 +282,46 @@ describe('ClientQueryConnection', () => {
     assert.equal(response.items[0]?.['cid'], '9');
   });
 
+  it('handles TeamSpeak’s "\\n\\r" line terminator', async () => {
+    // The real client terminates lines newline-first, carriage-return-second. Splitting on
+    // "\n" then leaves the CR leading the *next* line, so a naive trailing-CR strip leaves
+    // `\rerror id=0 msg=ok`, which no longer matches — and every command hangs until it
+    // times out. This was observed against a live TeamSpeak 3.6.2 client.
+    const { server, connection } = await connect();
+    server.respondWith((command, socket) => {
+      if (command.startsWith('auth ')) {
+        socket.write('error id=0 msg=ok\n\r');
+        return;
+      }
+      if (command === 'whoami') {
+        socket.write('clid=44 cid=10\n\rerror id=0 msg=ok\n\r');
+      }
+    });
+
+    connection.connect();
+    await waitFor(() => connection.isReady);
+
+    const response = await connection.send('whoami');
+    assert.equal(response.items[0]?.['clid'], '44');
+    assert.equal(response.items[0]?.['cid'], '10');
+  });
+
+  it('handles the conventional "\\r\\n" terminator too', async () => {
+    const { server, connection } = await connect();
+    server.respondWith((command, socket) => {
+      if (command.startsWith('auth ')) {
+        socket.write('error id=0 msg=ok\r\n');
+        return;
+      }
+      if (command === 'whoami') socket.write('clid=7\r\nerror id=0 msg=ok\r\n');
+    });
+
+    connection.connect();
+    await waitFor(() => connection.isReady);
+
+    assert.equal((await connection.send('whoami')).items[0]?.['clid'], '7');
+  });
+
   it('runs the onReady hook after every connect so notifications can be re-registered', async () => {
     let readyCalls = 0;
     const { server, connection } = await connect({

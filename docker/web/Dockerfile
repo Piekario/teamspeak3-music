@@ -5,7 +5,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable
 
-COPY pnpm-workspace.yaml package.json tsconfig.base.json tsconfig.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/frontend/package.json packages/frontend/
 RUN pnpm install --frozen-lockfile --filter @tsmusic/shared --filter @tsmusic/frontend

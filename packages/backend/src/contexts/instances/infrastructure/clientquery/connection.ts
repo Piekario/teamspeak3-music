@@ -240,7 +240,12 @@ export class ClientQueryConnection {
 
     let newlineIndex = this.#receiveBuffer.indexOf('\n');
     while (newlineIndex !== -1) {
-      const line = this.#receiveBuffer.slice(0, newlineIndex).replace(/\r$/, '');
+      // TeamSpeak terminates lines with "\n\r" — newline first, carriage return second.
+      // Splitting on "\n" therefore leaves the CR at the *start* of the following line, not
+      // the end of the current one, so stripping only a trailing CR silently corrupts every
+      // line after the first: `error id=0 msg=ok` arrives as `\rerror id=0 msg=ok` and stops
+      // matching, which makes every command hang until it times out.
+      const line = this.#receiveBuffer.slice(0, newlineIndex).replace(/^[\r\n]+|[\r\n]+$/g, '');
       this.#receiveBuffer = this.#receiveBuffer.slice(newlineIndex + 1);
       if (line.length > 0) this.#onLine(line);
       newlineIndex = this.#receiveBuffer.indexOf('\n');
