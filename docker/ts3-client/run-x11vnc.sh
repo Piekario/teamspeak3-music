@@ -16,5 +16,13 @@ if [[ "${ENABLE_VNC:-false}" != "true" ]]; then
   exec sleep infinity
 fi
 
+# x11vnc dies immediately if the display is not up yet, and supervisord's retry budget is
+# quickly exhausted by that — leaving no VNC for the rest of the container's life, which is
+# precisely when it is needed. Waiting first keeps the retry budget for real failures.
+for _ in $(seq 1 60); do
+  if xdpyinfo -display "${DISPLAY:-:99}" >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+
 echo '[x11vnc] starting on :5900 — bind it to localhost only, it has no authentication'
-exec x11vnc -display "${DISPLAY:-:99}" -forever -shared -nopw -rfbport 5900 -quiet
+exec x11vnc -display "${DISPLAY:-:99}" -forever -shared -nopw -rfbport 5900 -quiet -noxdamage

@@ -15,6 +15,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl bzip2 \
       xvfb x11vnc x11-utils \
+      # openbox: Qt will not take keyboard focus without a window manager, which makes any
+      # remaining GUI step — and VNC itself — unusable. sqlite3: used by the entrypoint to
+      # seed the licence acceptance keys. xdotool: drives the rare dialog that still needs it.
+      openbox sqlite3 xdotool \
       pulseaudio pulseaudio-utils libpulse0 \
       supervisor procps netcat-openbsd \
       libnss3 libxcursor1 libxcomposite1 libxi6 libxtst6 libxrandr2 \

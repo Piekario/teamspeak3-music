@@ -52,11 +52,19 @@ docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
 
 ## One-time client bootstrap
 
-Each bot needs a TeamSpeak identity, and the identity lives in the client's own config. That
-config volume is the **only state in this project that cannot be rebuilt** — back it up.
+The bootstrap is automatic. A container started against an empty volume creates its own
+identity, skips both first-run dialogs and connects to the configured server with no
+interaction at all. Two findings from 3.6.2 make that possible:
 
-Good news, verified against 3.6.2: **the ClientQuery plugin is enabled by default and
-generates its own API key on first start.** No GUI clicking is needed to obtain it.
+- **The ClientQuery plugin is enabled by default and generates its own API key**, written to
+  `clientquery.ini` in the config volume.
+- **The licence and promo dialogs are gated by two settings keys**, not by a command-line
+  flag — there is no accept-licence option in the binary. The entrypoint seeds
+  `General.LastShownLicense` and `General.SyncOverviewShown` before the client ever starts.
+  This matters more than it looks: the connect URI is consumed at startup, so a client
+  sitting behind a modal dialog silently never joins the server.
+
+So the only manual step is copying the generated key into your config:
 
 ```bash
 scripts/read-apikey.sh party
@@ -64,11 +72,17 @@ scripts/read-apikey.sh party
 
 Put that value into `instances.json` as `clientQuery.apiKey`, then restart the bot service.
 
+The config volume is the **only state in this project that cannot be rebuilt** — it holds the
+identity and the API key. Back it up (see below).
+
 ### When you do need the GUI
 
-Some client settings genuinely cannot be reached headlessly, and they matter for audio
-quality. Set `enableVnc: true` for the instance, regenerate, restart, then connect a VNC
-viewer to `127.0.0.1:5900` (macOS: `open vnc://localhost:5900`).
+The audio settings below still have to be set once per instance, and they matter a great
+deal for how the bot sounds. Set `enableVnc: true` for the instance, regenerate, restart,
+then connect a VNC viewer to `127.0.0.1:5900` (macOS: `open vnc://localhost:5900`).
+
+The image runs a window manager (openbox) specifically so this session is usable: Qt refuses
+keyboard focus without one, which makes dialogs impossible to dismiss over VNC.
 
 In the client, set:
 
@@ -169,3 +183,12 @@ text in chat precisely so you can tell which of these applies.
 **A build of the client image appears to hang for many minutes.** The installer asks for
 licence acceptance on stdin and will loop forever without it. The Dockerfile pipes `yes` into
 it; if you edit that line, keep the pipe.
+
+**The container is healthy but the bot never joins, and the log stops after "Collecting
+autoconnect bookmarks".** A modal dialog is blocking the client. The connect URI is consumed
+at startup, so it will never retry on its own. Check with
+`docker exec -e DISPLAY=:99 <container> xdotool search --name "." getwindowname %@`.
+
+**After a `docker restart` the bot is dead and the log says `could not connect to display
+:99`.** A stale X lock survived the restart. The entrypoint clears it; if you edit that
+block, keep it, or every restart under `restart: unless-stopped` will kill the bot for good.
