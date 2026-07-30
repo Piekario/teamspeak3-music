@@ -25,6 +25,10 @@ interface RawInstance {
   readonly playback?: Record<string, unknown>;
   readonly commands?: Record<string, unknown>;
   readonly permissions?: Record<string, unknown>;
+  readonly grants?: {
+    readonly identities?: Record<string, never>;
+    readonly serverGroups?: Record<string, never>;
+  };
 }
 
 /**
@@ -80,6 +84,7 @@ export function loadInstanceConfigs(path: string): Result<readonly InstanceConfi
       ...(entry.playback !== undefined ? { playback: entry.playback } : {}),
       ...(entry.commands !== undefined ? { commands: entry.commands } : {}),
       ...(entry.permissions !== undefined ? { permissions: entry.permissions } : {}),
+      ...(entry.grants !== undefined ? { grants: entry.grants } : {}),
     });
 
     if (!created.ok) {

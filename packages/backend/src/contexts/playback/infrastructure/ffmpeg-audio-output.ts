@@ -19,6 +19,12 @@ export interface FfmpegAudioOutputOptions {
    * the volume controller finds the right stream when several bots share a host.
    */
   readonly applicationName: string;
+  /**
+   * Must be the same proxy the resolver used. A googlevideo URL is bound to the IP that
+   * requested it, so fetching the media from a different exit address returns 403 even
+   * though the URL is perfectly fresh.
+   */
+  readonly proxy?: string | undefined;
   readonly logger: {
     debug(message: string, details?: Record<string, unknown>): void;
     warn(message: string, details?: Record<string, unknown>): void;
@@ -56,7 +62,14 @@ export class FfmpegAudioOutput implements AudioOutput {
     let child: ChildProcess;
     try {
       child = spawn(this.#options.binary, args, {
-        env: { ...process.env, PULSE_SERVER: this.#options.pulseServer },
+        env: {
+          ...process.env,
+          PULSE_SERVER: this.#options.pulseServer,
+          // ffmpeg reads proxy settings from the environment for http/https inputs.
+          ...(this.#options.proxy === undefined
+            ? {}
+            : { http_proxy: this.#options.proxy, https_proxy: this.#options.proxy }),
+        },
         stdio: ['ignore', 'ignore', 'pipe'],
       });
     } catch (error) {

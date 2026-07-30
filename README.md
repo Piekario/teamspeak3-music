@@ -189,6 +189,34 @@ update yt-dlp (it lives in a volume, no rebuild needed), then supply `YTDLP_COOK
 from a logged-in browser, then try `YTDLP_EXTRACTOR_ARGS`. The bot reports yt-dlp's own error
 text in chat precisely so you can tell which of these applies.
 
+## Running on a datacenter IP
+
+A home connection generally passes. A VPS — Hetzner, OVH, DigitalOcean — very often does not:
+YouTube answers "Sign in to confirm you're not a bot" on a large share of datacenter ranges.
+Plan for this before deploying rather than after.
+
+**The constraint that shapes every workaround:** a `googlevideo` media URL is bound to the IP
+that requested it. Resolving from a clean address and streaming from the server does not
+work — the stream returns 403 on a URL that looks perfectly fresh. Whatever you do must apply
+to *both* the metadata call and the media fetch, which is why `YTDLP_PROXY` configures them
+together rather than exposing two settings that could disagree.
+
+Three levers, strongest first:
+
+| Lever | Setting | Trade-off |
+|---|---|---|
+| Egress proxy | `YTDLP_PROXY=socks5://host:1080` | Most effective, no account involved. Needs a proxy whose IP YouTube trusts — a residential/mobile proxy, or a tunnel back to a connection that already works. All audio traffic flows through it, so bandwidth and latency are real considerations. |
+| Cookies | `YTDLP_COOKIES_FILE=/data/cookies.txt` | Very effective. Ties a Google account to the bot, and that account can be rate-limited or banned for this pattern — use one you are willing to lose, never your main. Cookies expire and need re-exporting. |
+| PO tokens | `YTDLP_POT_PROVIDER_URL` | Helps, guarantees nothing. The provider's own README says a PO token "may help your traffic seem more legitimate" — it is a supplement to the two above, not a substitute. |
+
+A WireGuard tunnel from the server back to a connection that already works is the usual way
+to get a trusted egress without paying for a proxy service. Point `YTDLP_PROXY` at a local
+SOCKS proxy on the far side of that tunnel.
+
+None of these is permanent. Treat a working setup as something to monitor, not something to
+finish — which is why yt-dlp lives in a volume and every lever is an environment variable
+rather than a rebuild.
+
 **A build of the client image appears to hang for many minutes.** The installer asks for
 licence acceptance on stdin and will loop forever without it. The Dockerfile pipes `yes` into
 it; if you edit that line, keep the pipe.

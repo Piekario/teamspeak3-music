@@ -216,6 +216,42 @@ describe('createInstanceConfig', () => {
     assert.ok(created.error.kind === 'instance/missing-field' && created.error.field === 'clientQuery.apiKey');
   });
 
+  it('carries role grants through, so the operator is not locked out of their own bot', () => {
+    // Without grants the resolver can only ever hand out the default role, which leaves even
+    // the bot's owner unable to run a DJ command on their own server.
+    const created = createInstanceConfig({
+      id: 'party',
+      name: 'Party',
+      teamspeak: { host: 'ts.example.com' },
+      clientQuery: { host: 'client', apiKey: 'KEY' },
+      audio: { pulseServer: 'tcp:client:4713' },
+      grants: {
+        identities: { 'uid-alice': 'owner' },
+        serverGroups: { 9: 'dj', 15: 'user' },
+      },
+    });
+
+    assert.ok(created.ok);
+    assert.equal(created.value.grants.identities['uid-alice'], 'owner');
+    // JSON object keys arrive as strings; server group ids are numbers everywhere else.
+    assert.equal(created.value.grants.serverGroups.get(9), 'dj');
+    assert.equal(created.value.grants.serverGroups.size, 2);
+  });
+
+  it('defaults to no grants rather than failing', () => {
+    const created = createInstanceConfig({
+      id: 'party',
+      name: 'Party',
+      teamspeak: { host: 'ts.example.com' },
+      clientQuery: { host: 'client', apiKey: 'KEY' },
+      audio: { pulseServer: 'tcp:client:4713' },
+    });
+
+    assert.ok(created.ok);
+    assert.deepEqual(created.value.grants.identities, {});
+    assert.equal(created.value.grants.serverGroups.size, 0);
+  });
+
   it('rejects an impossible port', () => {
     const created = createInstanceConfig({
       id: 'party',

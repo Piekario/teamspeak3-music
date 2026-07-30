@@ -16,6 +16,15 @@ export interface YtDlpResolverOptions {
    * fix does not require a rebuild at the moment it is most urgently needed.
    */
   readonly extractorArgs?: string | undefined;
+  /**
+   * Egress proxy, e.g. `socks5://tunnel:1080`.
+   *
+   * The single most effective lever on a datacenter IP, and the only one that involves no
+   * account. It must be paired with the same proxy on the media fetch: a googlevideo URL is
+   * bound to the IP that requested it, so resolving through a proxy and streaming directly
+   * yields a 403 every time.
+   */
+  readonly proxy?: string | undefined;
   readonly timeoutMs?: number;
 }
 
@@ -92,6 +101,10 @@ export class YtDlpResolver implements TrackResolver {
       '-f',
       'bestaudio[acodec=opus]/bestaudio/best',
     ];
+
+    if (this.#options.proxy !== undefined) {
+      args.push('--proxy', this.#options.proxy);
+    }
 
     if (this.#options.cookiesFile !== undefined) {
       args.push('--cookies', this.#options.cookiesFile);

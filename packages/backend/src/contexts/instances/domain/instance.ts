@@ -1,5 +1,7 @@
 import type { AudioEndpoint, ClientQueryEndpoint, TeamSpeakTarget } from '@tsmusic/shared';
 
+import type { Role } from '@tsmusic/shared';
+
 import { err, ok, type Result } from '../../../shared-kernel/result.ts';
 import type { QueueLimits } from '../../playback/domain/queue.ts';
 import type { PermissionPolicy } from '../../access/domain/permission-resolver.ts';
@@ -22,6 +24,20 @@ export interface InstanceConfig {
   readonly playback: PlaybackSettings;
   readonly commands: CommandSettings;
   readonly permissions: PermissionPolicy;
+  readonly grants: RoleGrants;
+}
+
+/**
+ * Who gets which role.
+ *
+ * Without these the permission policy can only ever hand out its default role, which leaves
+ * even the bot's owner unable to run a DJ command on their own server. Grants by server
+ * group are the practical form — one entry covers everyone in an admin group — while grants
+ * by UID cover individuals. UIDs, never nicknames: a nickname is not identity.
+ */
+export interface RoleGrants {
+  readonly identities: Readonly<Record<string, Role>>;
+  readonly serverGroups: ReadonlyMap<number, Role>;
 }
 
 export interface PlaybackSettings extends QueueLimits {
@@ -56,6 +72,10 @@ export function createInstanceConfig(raw: {
   playback?: Partial<PlaybackSettings>;
   commands?: Partial<CommandSettings>;
   permissions?: Partial<PermissionPolicy>;
+  grants?: {
+    identities?: Record<string, Role>;
+    serverGroups?: Record<string | number, Role>;
+  };
 }): Result<InstanceConfig, InstanceConfigError> {
   for (const [field, value] of [
     ['id', raw.id],
@@ -116,6 +136,15 @@ export function createInstanceConfig(raw: {
     permissions: {
       defaultRole: raw.permissions?.defaultRole ?? 'user',
       whitelistOnly: raw.permissions?.whitelistOnly ?? false,
+    },
+    grants: {
+      identities: raw.grants?.identities ?? {},
+      // JSON object keys are strings; server group ids are numbers everywhere else.
+      serverGroups: new Map(
+        Object.entries(raw.grants?.serverGroups ?? {})
+          .map(([groupId, role]) => [Number.parseInt(groupId, 10), role] as const)
+          .filter(([groupId]) => !Number.isNaN(groupId)),
+      ),
     },
   });
 }

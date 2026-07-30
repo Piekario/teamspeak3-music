@@ -49,6 +49,7 @@ async function main(): Promise<void> {
       potProviderUrl: config.YTDLP_POT_PROVIDER_URL,
       cookiesFile: config.YTDLP_COOKIES_FILE,
       extractorArgs: config.YTDLP_EXTRACTOR_ARGS,
+      proxy: config.YTDLP_PROXY,
     }),
   ];
 
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
     events,
     resolvers,
     binaries: { ffmpeg: config.FFMPEG_BINARY, pactl: config.PACTL_BINARY },
+    proxy: config.YTDLP_PROXY,
     webUrl: config.WEB_URL,
     logger: scopedLogger(logger, { component: 'instance' }),
   });

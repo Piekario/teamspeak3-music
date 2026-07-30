@@ -25,6 +25,8 @@ export interface InstanceRuntimeDependencies {
   readonly events: EventPublisher;
   readonly resolvers: readonly TrackResolver[];
   readonly binaries: { readonly ffmpeg: string; readonly pactl: string };
+  /** Must match the resolver's proxy: media URLs are bound to the requesting IP. */
+  readonly proxy?: string | undefined;
   readonly webUrl?: string | undefined;
   readonly logger: RuntimeLogger;
   readonly onIdentitySeen?: (instanceId: string, uid: string, nickname: string) => void;
@@ -93,6 +95,7 @@ export class InstanceRuntime {
         // Namespaced per instance so `pactl list sink-inputs` can tell several bots apart
         // on one host.
         applicationName: `tsmusic-${this.#config.id}`,
+        proxy: deps.proxy,
         logger: deps.logger,
       }),
       volume: new PactlVolumeController({
@@ -123,7 +126,13 @@ export class InstanceRuntime {
     this.#dispatcher = new CommandDispatcher({
       instanceId: this.#config.id,
       registry,
-      permissions: () => new PermissionResolver({ policy: this.#config.permissions }),
+      // Rebuilt per dispatch so a reconfigured instance takes effect without a reconnect.
+      permissions: () =>
+        new PermissionResolver({
+          policy: this.#config.permissions,
+          identityGrants: new Map(Object.entries(this.#config.grants.identities)),
+          groupGrants: this.#config.grants.serverGroups,
+        }),
       settings: () => ({
         prefix: this.#config.commands.prefix,
         requireSameChannel: this.#config.commands.requireSameChannel,

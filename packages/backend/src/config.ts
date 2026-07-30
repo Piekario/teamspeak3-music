@@ -28,6 +28,14 @@ const environmentSchema = z.object({
   YTDLP_POT_PROVIDER_URL: z.string().url().optional(),
   YTDLP_COOKIES_FILE: z.string().optional(),
   YTDLP_EXTRACTOR_ARGS: z.string().optional(),
+  /**
+   * Egress proxy for everything that talks to YouTube, e.g. `socks5://tunnel:1080`.
+   *
+   * Applied to yt-dlp and to ffmpeg's media fetch together, and deliberately as a single
+   * setting: a googlevideo URL is bound to the IP that requested it, so the two must leave
+   * by the same address or playback fails with 403 on a URL that looks perfectly valid.
+   */
+  YTDLP_PROXY: z.string().optional(),
 
   FFMPEG_BINARY: z.string().default('ffmpeg'),
   PACTL_BINARY: z.string().default('pactl'),
