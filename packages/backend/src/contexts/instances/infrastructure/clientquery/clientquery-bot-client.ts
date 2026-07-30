@@ -175,6 +175,18 @@ export class ClientQueryBotClient implements BotClient {
     });
   }
 
+  async setOutputMuted(muted: boolean): Promise<void> {
+    await this.#connection.send('clientupdate', {
+      params: { client_output_muted: muted ? 1 : 0 },
+    });
+  }
+
+  async setInputMuted(muted: boolean): Promise<void> {
+    await this.#connection.send('clientupdate', {
+      params: { client_input_muted: muted ? 1 : 0 },
+    });
+  }
+
   #emitMessage(item: ParamMap, target: MessageTarget): void {
     const message: IncomingMessage = {
       target,

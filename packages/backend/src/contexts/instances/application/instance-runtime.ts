@@ -218,6 +218,19 @@ export class InstanceRuntime {
       });
     }
 
+    // The bot joins deaf and speaking. It has nothing to listen to — muting its output is
+    // what guarantees it can never relay other people's voices back into the channel, and it
+    // also tells everyone at a glance that the bot is not listening in.
+    await this.#bot.setOutputMuted(true).catch((error: unknown) => {
+      this.#deps.logger.warn('could not mute bot output', {
+        instance: this.#config.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    await this.#bot.setInputMuted(false).catch(() => {
+      // Its microphone is the music; if this fails the audio simply will not be heard.
+    });
+
     this.#setConnectionState('connected', null);
     await this.#publishStatus();
   }

@@ -26,5 +26,16 @@ load-module module-null-sink sink_name=bot_sink rate=48000 channels=2 sink_prope
 # The virtual microphone TeamSpeak captures from.
 load-module module-remap-source source_name=bot_mic master=bot_sink.monitor source_properties=device.description="BotMic"
 
-set-default-sink bot_sink
+# Where the TeamSpeak client's own playback goes — straight into the void.
+#
+# This sink is not decorative, it prevents a feedback loop. The client only has an ALSA
+# backend, so it plays to whatever PulseAudio's default sink is. If that default were
+# bot_sink, everything the bot hears from other people would land in bot_sink, flow through
+# bot_sink.monitor into bot_mic, and be transmitted straight back to the server — the bot
+# would parrot every speaker in the channel.
+#
+# ffmpeg is unaffected because it addresses `-device bot_sink` explicitly.
+load-module module-null-sink sink_name=bot_void rate=48000 channels=2 sink_properties=device.description="BotVoid"
+
+set-default-sink bot_void
 set-default-source bot_mic

@@ -27,6 +27,16 @@ export interface BotClient {
 
   moveToChannel(channelId: number, password?: string): Promise<void>;
   setNickname(nickname: string): Promise<void>;
+
+  /**
+   * Muting the bot's speakers is not cosmetic. The client has only an ALSA backend and plays
+   * to PulseAudio's default sink; if anything the bot hears were routed into the sink that
+   * feeds its own microphone, it would retransmit every speaker in the channel. The sink
+   * layout prevents that structurally — this is the second line of defence, and it also
+   * spares the bot from decoding audio nobody will ever hear.
+   */
+  setOutputMuted(muted: boolean): Promise<void>;
+  setInputMuted(muted: boolean): Promise<void>;
 }
 
 export interface BotIdentity {

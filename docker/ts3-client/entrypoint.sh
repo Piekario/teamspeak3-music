@@ -67,5 +67,50 @@ if ! has_license_marker; then
   chown ts3:ts3 "${SETTINGS_DB}"
 fi
 
+# Audio profile.
+#
+# The client's shipped defaults are all wrong for a music bot and every one of them is
+# audible:
+#   vad + voice activation  gates out quiet intros and fades
+#   agc                     applies its own dynamic gain, so our volume control goes
+#                           non-linear and feels broken
+#   denoise                 is tuned for speech and mangles music
+#
+# These are plain newline-separated key=value blobs in settings.db, so they can be set here
+# rather than clicked through a GUI. Note TeamSpeak's own spelling of
+# `continous_transmission` — it is missing a `u` and must be matched exactly.
+seed_audio_profile() {
+  sqlite3 "${SETTINGS_DB}" <<'SQL'
+CREATE TABLE IF NOT EXISTS Profiles (timestamp INTEGER, key TEXT PRIMARY KEY, value TEXT);
+INSERT OR REPLACE INTO Profiles (timestamp, key, value) VALUES
+  (strftime('%s','now'), 'Capture/Default/PreProcessing',
+   'vad=false
+vad_mode=0
+voiceactivation_level=-40
+vad_over_ptt=false
+denoise=false
+agc=false
+continous_transmission=true'),
+  (strftime('%s','now'), 'Playback/Default',
+   'MonoSoundExpansion=2
+DeviceDisplayName=
+VolumeModifier=0
+Mode=
+PlaybackMonoOverCenterSpeaker=false
+PlayMicClicksOnOwn=false
+PlayMicClicksOnOthers=false
+Device=
+AGC=false
+ComfortNoiseVolume=-60
+ComfortNoiseEnabled=false');
+SQL
+}
+
+if [[ "${TS3_SEED_AUDIO_PROFILE:-true}" == "true" ]]; then
+  log 'applying music-friendly capture settings (continuous transmission, no AGC/VAD/denoise)'
+  seed_audio_profile
+  chown ts3:ts3 "${SETTINGS_DB}"
+fi
+
 log "starting supervisord (VNC=${ENABLE_VNC:-false})"
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/ts3.conf
