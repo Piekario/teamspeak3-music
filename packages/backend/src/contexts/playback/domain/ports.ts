@@ -42,6 +42,15 @@ export interface PlaylistListing {
 
 export type ResolveError =
   | { readonly kind: 'resolve/not-found'; readonly query: string }
+  /**
+   * The source will only serve this to a signed-in, age-verified viewer.
+   *
+   * Kept apart from `blocked` because the remedies differ: a bot challenge can be answered
+   * with a proxy or a PO token, while an age gate can only be answered with cookies from an
+   * account that has been verified. Telling somebody to try a proxy for an 18+ track would
+   * send them a long way down the wrong road.
+   */
+  | { readonly kind: 'resolve/age-restricted'; readonly url: string }
   | { readonly kind: 'resolve/unsupported-url'; readonly url: string }
   | { readonly kind: 'resolve/blocked'; readonly detail: string }
   | { readonly kind: 'resolve/tool-failure'; readonly detail: string }

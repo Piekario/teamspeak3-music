@@ -570,6 +570,8 @@ function describeResolveError(error: ResolveError): string {
       return `nothing found for "${error.query}"`;
     case 'resolve/unsupported-url':
       return `unsupported URL: ${error.url}`;
+    case 'resolve/age-restricted':
+      return 'age-restricted: YouTube serves this one only to a signed-in, verified account';
     case 'resolve/blocked':
       return `YouTube blocked the request: ${error.detail}`;
     case 'resolve/timeout':

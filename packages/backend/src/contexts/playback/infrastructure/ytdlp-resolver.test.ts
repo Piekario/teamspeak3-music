@@ -46,6 +46,28 @@ describe('classifyFailure', () => {
     assert.ok(error.kind === 'resolve/blocked' && error.detail.includes('Sign in to confirm'));
   });
 
+  it('separates an age gate from a bot challenge', () => {
+    // Both start "Sign in to confirm", and the remedies are nothing alike: a bot challenge
+    // can be answered with a proxy or a PO token, an age gate only with verified cookies.
+    const error = classifyFailure(
+      execError(),
+      'ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate for some users.',
+      ['https://youtu.be/abc'],
+    );
+
+    assert.equal(error.kind, 'resolve/age-restricted');
+  });
+
+  it('recognises an age gate reported as a restriction', () => {
+    const error = classifyFailure(
+      execError(),
+      'ERROR: [youtube] abc: Video is age-restricted and cookies are required',
+      ['https://youtu.be/abc'],
+    );
+
+    assert.equal(error.kind, 'resolve/age-restricted');
+  });
+
   it('recognises an unavailable video', () => {
     const error = classifyFailure(execError(), 'ERROR: Video unavailable', ['https://youtu.be/x']);
     assert.equal(error.kind, 'resolve/not-found');

@@ -184,6 +184,25 @@ into `bot_void`, a sink whose monitor feeds nothing.
 Note that `client_flag_talking` is not a reliable check here — it was observed reading `0`
 while audio was genuinely being transmitted. Trust your ears, or `pactl list sink-inputs`.
 
+**"That one is 18+".** YouTube serves age-restricted videos only to a signed-in account that
+has been age-verified, and there is no way around that from an anonymous client — not a
+proxy, not a PO token, not an extractor argument. The bot needs cookies from such an account:
+
+```
+YTDLP_COOKIES_FILE=./cookies.txt
+```
+
+pointing at a Netscape-format export, which compose mounts read-only into the container. The
+easiest way to produce one:
+
+```
+yt-dlp --cookies-from-browser firefox --cookies cookies.txt --skip-download https://youtu.be/dQw4w9WgXcQ
+```
+
+Use an account you are willing to lose — this pattern gets accounts rate-limited — and expect
+to re-export when the cookies expire. The bot names this case specifically in chat rather than
+reporting a generic refusal, because the remedy is different from every other block.
+
 **`yt-dlp` suddenly fails on everything.** YouTube changed extraction. In order of effort:
 update yt-dlp (it lives in a volume, no rebuild needed), then supply `YTDLP_COOKIES_FILE`
 from a logged-in browser, then try `YTDLP_EXTRACTOR_ARGS`. The bot reports yt-dlp's own error

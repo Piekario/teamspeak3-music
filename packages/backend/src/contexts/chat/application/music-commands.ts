@@ -616,6 +616,8 @@ function describeRequestFailure(error: {
     case 'resolve/unsupported-url':
     case 'playback/no-resolver':
       return 'I do not know how to play that link.';
+    case 'resolve/age-restricted':
+      return 'That one is 18+. YouTube only serves it to a signed-in, age-verified account, so I need cookies from one before I can play it.';
     case 'resolve/blocked':
       return `YouTube refused: ${String(error['detail'])}`;
     case 'resolve/timeout':

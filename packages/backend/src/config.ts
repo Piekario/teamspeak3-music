@@ -8,6 +8,19 @@ import { err, ok, type Result } from './shared-kernel/result.ts';
  * A misconfigured bot should fail immediately and say which variable is wrong, rather than
  * starting and then failing obscurely the first time somebody types `!play`.
  */
+/**
+ * An optional string that treats "" as absent.
+ *
+ * Compose writes an empty value for an unset variable rather than omitting it, and an empty
+ * string is not "no setting" to zod — so without this, `--cookies ""` would be passed to
+ * yt-dlp and every lookup would fail on a cookies file that does not exist.
+ */
+const optionalText = () =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    z.string().optional(),
+  );
+
 const environmentSchema = z.object({
   HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   HTTP_HOST: z.string().default('0.0.0.0'),
@@ -25,9 +38,12 @@ const environmentSchema = z.object({
     .string()
     .default('true')
     .transform((value) => value.toLowerCase() === 'true'),
-  YTDLP_POT_PROVIDER_URL: z.string().url().optional(),
-  YTDLP_COOKIES_FILE: z.string().optional(),
-  YTDLP_EXTRACTOR_ARGS: z.string().optional(),
+  YTDLP_POT_PROVIDER_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim().length === 0 ? undefined : value),
+    z.string().url().optional(),
+  ),
+  YTDLP_COOKIES_FILE: optionalText(),
+  YTDLP_EXTRACTOR_ARGS: optionalText(),
   /**
    * Egress proxy for everything that talks to YouTube, e.g. `socks5://tunnel:1080`.
    *
@@ -35,7 +51,7 @@ const environmentSchema = z.object({
    * setting: a googlevideo URL is bound to the IP that requested it, so the two must leave
    * by the same address or playback fails with 403 on a URL that looks perfectly valid.
    */
-  YTDLP_PROXY: z.string().optional(),
+  YTDLP_PROXY: optionalText(),
 
   FFMPEG_BINARY: z.string().default('ffmpeg'),
   PACTL_BINARY: z.string().default('pactl'),

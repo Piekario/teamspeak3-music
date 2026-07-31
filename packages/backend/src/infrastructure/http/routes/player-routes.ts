@@ -186,6 +186,8 @@ function describe(error: { readonly kind: string; readonly [key: string]: unknow
     case 'resolve/unsupported-url':
     case 'playback/no-resolver':
       return 'unsupported link';
+    case 'resolve/age-restricted':
+      return 'age-restricted: YouTube serves this only to a signed-in, verified account (set YTDLP_COOKIES_FILE)';
     case 'resolve/blocked':
       return `YouTube blocked the request: ${String(error['detail'])}`;
     case 'resolve/timeout':

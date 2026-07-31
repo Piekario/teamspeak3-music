@@ -25,6 +25,10 @@ services:
       INSTANCES_FILE: /config/instances.json
       YTDLP_BINARY: yt-dlp
       YTDLP_AUTO_UPDATE: "${YTDLP_AUTO_UPDATE:-true}"
+      # Set only when a cookies file was actually given, so yt-dlp is never handed the path
+      # of a file that is not there. The container path is fixed; the host path is yours.
+      YTDLP_COOKIES_FILE: "${YTDLP_COOKIES_FILE:+/config/cookies.txt}"
+      YTDLP_PROXY: "${YTDLP_PROXY:-}"
       YTDLP_POT_PROVIDER_URL: http://pot-provider:4416
       FFMPEG_BINARY: ffmpeg
       PACTL_BINARY: pactl
@@ -43,6 +47,10 @@ services:
       - ytdlp:/opt/ytdlp
       # Read-only: the bot reads its instance list, it never rewrites it.
       - ./instances.json:/config/instances.json:ro
+      # Cookies from a signed-in YouTube account, needed for anything age-restricted.
+      # Defaults to /dev/null so the mount is valid when no file was configured; the
+      # environment variable above is what decides whether yt-dlp is told about it.
+      - ${YTDLP_COOKIES_FILE:-/dev/null}:/config/cookies.txt:ro
     ports:
       - "8080:8080"
     networks:

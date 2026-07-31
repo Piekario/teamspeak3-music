@@ -239,6 +239,15 @@ export function classifyFailure(
   const message = stderr.trim();
   const lowered = message.toLowerCase();
 
+  // Checked before the bot challenge, which shares the "sign in to confirm" wording.
+  if (
+    lowered.includes('confirm your age') ||
+    lowered.includes('age-restricted') ||
+    lowered.includes('inappropriate for some users')
+  ) {
+    return { kind: 'resolve/age-restricted', url: commandArgs.at(-1) ?? '' };
+  }
+
   if (
     lowered.includes('sign in to confirm') ||
     lowered.includes('confirm you') ||

@@ -243,6 +243,8 @@ export function describePlaylistError(error: PlaylistError): string {
       return `I do not know how to read ${error.url}.`;
     case 'resolve/not-found':
       return `Nothing found for "${error.query}".`;
+    case 'resolve/age-restricted':
+      return 'That one is age-restricted — YouTube only serves it to a signed-in, verified account.';
     case 'resolve/blocked':
       return `That source refused the request: ${error.detail}`;
     case 'resolve/timeout':
