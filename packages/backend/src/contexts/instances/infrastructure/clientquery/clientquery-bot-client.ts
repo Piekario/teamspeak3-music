@@ -175,6 +175,60 @@ export class ClientQueryBotClient implements BotClient {
     });
   }
 
+  /**
+   * Joins a TeamSpeak server.
+   *
+   * Needed because a graceful disconnect really does leave: the headless client only
+   * auto-connects from its start-up URI, so without this the panel's "connect" would reopen
+   * the control socket and leave the bot sitting off the server, and the button would appear
+   * to work in one direction only.
+   */
+  async connectToServer(target: {
+    host: string;
+    port: number;
+    nickname: string;
+    serverPassword?: string | null;
+    channel?: string | null;
+    channelPassword?: string | null;
+  }): Promise<void> {
+    await this.#connection.send('connect', {
+      params: {
+        address: `${target.host}:${target.port}`,
+        nickname: target.nickname,
+        password: target.serverPassword ?? undefined,
+        channel: target.channel ?? undefined,
+        channel_pw: target.channelPassword ?? undefined,
+      },
+    });
+    this.#cachedChannel = undefined;
+  }
+
+  /**
+   * Whether the client is on a server at all.
+   *
+   * `whoami` answers with error 1794 ("not connected") rather than failing the socket, which
+   * makes it the cheapest way to ask.
+   */
+  async isOnServer(): Promise<boolean> {
+    try {
+      await this.#connection.send('whoami');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Leaves the TeamSpeak server.
+   *
+   * Distinct from closing the ClientQuery socket, which only stops us steering the client —
+   * the client itself stays connected and the bot remains sitting in the channel. Anyone
+   * pressing "disconnect" means the bot should leave, not that we should stop watching it.
+   */
+  async disconnectFromServer(reason: string): Promise<void> {
+    await this.#connection.send('disconnect', { params: { reasonmsg: reason } });
+  }
+
   async setOutputMuted(muted: boolean): Promise<void> {
     await this.#connection.send('clientupdate', {
       params: { client_output_muted: muted ? 1 : 0 },

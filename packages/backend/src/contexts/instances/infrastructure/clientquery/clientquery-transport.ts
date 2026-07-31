@@ -31,10 +31,12 @@ export class ClientQueryTransport implements InstanceTransport {
   readonly #connection: ClientQueryConnection;
   readonly #bot: ClientQueryBotClient;
   readonly #audio: AudioOutput;
+  readonly #logger: ClientQueryLogger;
   #onConnectionChange: ((state: ConnectionState, error: string | null) => void) | undefined;
 
   constructor(options: ClientQueryTransportOptions) {
     const { config } = options;
+    this.#logger = options.logger;
 
     this.#connection = new ClientQueryConnection({
       host: config.clientQuery.host,
@@ -44,6 +46,21 @@ export class ClientQueryTransport implements InstanceTransport {
       logger: options.logger,
       onReady: async () => {
         await this.#bot.registerNotifications();
+
+        // Rejoins after a deliberate disconnect. The headless client only auto-connects from
+        // its start-up URI, so on any later reconnect of the control socket it may be sitting
+        // off the server with nothing to bring it back.
+        if (!(await this.#bot.isOnServer())) {
+          await this.#bot.connectToServer({
+            host: config.teamspeak.host,
+            port: config.teamspeak.port,
+            nickname: config.teamspeak.nickname,
+            serverPassword: config.serverPassword,
+            channel: config.teamspeak.channel,
+            channelPassword: config.teamspeak.channelPassword,
+          });
+        }
+
         await options.onReady();
       },
       onNotification: (notification) => this.#bot.handleNotification(notification),
@@ -75,6 +92,20 @@ export class ClientQueryTransport implements InstanceTransport {
   }
 
   async stop(): Promise<void> {
+    // The bot leaves the server first, then we close our control channel. Closing the socket
+    // alone would only stop us steering the client — it would stay connected and keep
+    // sitting in the channel, which is not what anyone pressing "disconnect" means.
+    //
+    // A failure here is not worth aborting the stop over: the socket may already be gone,
+    // and leaving the connection open because the goodbye failed would be worse.
+    try {
+      await this.#bot.disconnectFromServer('Disconnected from the panel');
+    } catch (error) {
+      this.#logger.debug('could not leave the server cleanly', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     await this.#connection.close();
   }
 
