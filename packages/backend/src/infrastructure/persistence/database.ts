@@ -60,6 +60,7 @@ function ensureSchema(connection: Database.Database): void {
       client_query_api_key TEXT,
       pulse_server TEXT,
       sink_name TEXT DEFAULT 'bot_sink',
+      settings_json TEXT,
       identity_key TEXT,
       identity_offset INTEGER NOT NULL DEFAULT 0,
       identity_uid TEXT,
@@ -100,6 +101,22 @@ function ensureSchema(connection: Database.Database): void {
     CREATE INDEX IF NOT EXISTS playlist_tracks_playlist
       ON playlist_tracks (playlist_id, position);
   `);
+
+  // Databases created before the column existed still have to gain it, or every instance
+  // loses its channel, permissions and grants on the next start.
+  addColumnIfMissing(connection, 'instances', 'settings_json', 'TEXT');
+}
+
+/** Additive-only, and quiet when the column is already there. */
+function addColumnIfMissing(
+  connection: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = connection.pragma(`table_info(${table})`) as Array<{ name: string }>;
+  if (columns.some((existing) => existing.name === column)) return;
+  connection.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export { schema };

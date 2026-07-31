@@ -1,10 +1,15 @@
 import { eq } from 'drizzle-orm';
 
+import type { Role } from '@tsmusic/shared';
+
 import type {
   InstanceRepository,
   StoredIdentity,
 } from '../../contexts/instances/domain/instance-repository.ts';
-import { createInstanceConfig, type InstanceConfig } from '../../contexts/instances/domain/instance.ts';
+import {
+  createInstanceConfig,
+  type InstanceConfig,
+} from '../../contexts/instances/domain/instance.ts';
 import type { Db } from './database.ts';
 import { instances } from './schema.ts';
 
@@ -60,6 +65,7 @@ export class DrizzleInstanceRepository implements InstanceRepository {
         clientQueryApiKey: config.clientQuery.apiKey,
         pulseServer: config.audio.pulseServer,
         sinkName: config.audio.sinkName,
+        settingsJson: serialiseSettings(config),
         createdAt: now,
         updatedAt: now,
       })
@@ -78,6 +84,7 @@ export class DrizzleInstanceRepository implements InstanceRepository {
           clientQueryApiKey: config.clientQuery.apiKey,
           pulseServer: config.audio.pulseServer,
           sinkName: config.audio.sinkName,
+          settingsJson: serialiseSettings(config),
           updatedAt: now,
         },
       })
@@ -120,6 +127,8 @@ export class DrizzleInstanceRepository implements InstanceRepository {
   }
 
   #toConfig(row: InstanceRow): InstanceConfig | undefined {
+    const settings = this.#parseSettings(row);
+
     const created = createInstanceConfig({
       id: row.id,
       name: row.name,
@@ -129,7 +138,14 @@ export class DrizzleInstanceRepository implements InstanceRepository {
         port: row.teamspeakPort,
         nickname: row.nickname,
         homeChannelId: row.homeChannelId,
+        channel: settings.channel ?? null,
+        channelPassword: settings.channelPassword ?? null,
       },
+      playback: settings.playback ?? {},
+      commands: settings.commands ?? {},
+      connection: settings.connection ?? {},
+      permissions: settings.permissions ?? {},
+      grants: settings.grants ?? {},
       serverPassword: row.serverPassword,
       clientQuery: {
         // Defaulted from the id, matching how the compose services are named, so a row
@@ -154,4 +170,55 @@ export class DrizzleInstanceRepository implements InstanceRepository {
     }
     return created.value;
   }
+
+  /**
+   * Reads the tunables back, tolerating anything.
+   *
+   * A malformed blob costs the instance its settings, which `createInstanceConfig` then
+   * refills with defaults — annoying but recoverable. Throwing here would instead take the
+   * whole instance out of the listing, so a single bad character would look like a bot that
+   * had vanished.
+   */
+  #parseSettings(row: InstanceRow): StoredSettings {
+    if (row.settingsJson === null || row.settingsJson.length === 0) return {};
+
+    try {
+      const parsed: unknown = JSON.parse(row.settingsJson);
+      return typeof parsed === 'object' && parsed !== null ? (parsed as StoredSettings) : {};
+    } catch (error) {
+      this.#logger.warn('ignoring unreadable instance settings', {
+        id: row.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  }
+}
+
+/** The shape stored in `settings_json`; every field optional, since older rows lack them. */
+type StoredSettings = Partial<{
+  channel: string | null;
+  channelPassword: string | null;
+  playback: Partial<InstanceConfig['playback']>;
+  commands: Partial<InstanceConfig['commands']>;
+  connection: Partial<InstanceConfig['connection']>;
+  permissions: Partial<InstanceConfig['permissions']>;
+  grants: { identities?: Record<string, Role>; serverGroups?: Record<string, Role> };
+}>;
+
+function serialiseSettings(config: InstanceConfig): string {
+  return JSON.stringify({
+    channel: config.teamspeak.channel,
+    channelPassword: config.teamspeak.channelPassword,
+    playback: config.playback,
+    commands: config.commands,
+    connection: config.connection,
+    permissions: config.permissions,
+    grants: {
+      identities: config.grants.identities,
+      // A Map does not survive JSON; the numeric keys come back as strings, which is exactly
+      // what `createInstanceConfig` expects to parse.
+      serverGroups: Object.fromEntries(config.grants.serverGroups),
+    },
+  });
 }

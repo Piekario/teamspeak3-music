@@ -35,6 +35,16 @@ export const instances = sqliteTable('instances', {
    * this key, and server groups and permissions are granted against that id — so losing it
    * means the bot comes back as a stranger and every grant an admin made has to be redone.
    */
+  /**
+   * Everything that is a *tunable* rather than an address: channel, playback limits, command
+   * settings, permissions and grants.
+   *
+   * One JSON column instead of a column per field, for the same reason the settings table is
+   * key/value — these change often, and a new toggle should not need a migration. Addresses
+   * stay as real columns because they are queried and defaulted.
+   */
+  settingsJson: text('settings_json'),
+
   identityKey: text('identity_key'),
   identityOffset: integer('identity_offset').notNull().default(0),
   identityUid: text('identity_uid'),
