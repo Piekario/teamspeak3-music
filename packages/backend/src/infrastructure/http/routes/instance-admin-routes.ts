@@ -55,7 +55,18 @@ const createInstanceSchema = z.object({
     .optional(),
 });
 
-const updateInstanceSchema = createInstanceSchema.partial().omit({ id: true });
+/**
+ * An update names only what is changing, all the way down.
+ *
+ * A shallow `.partial()` is not enough: it makes `teamspeak` optional but leaves `host`
+ * required inside it, so `{"teamspeak":{"nickname":"…"}}` — the obvious way to rename a bot —
+ * is rejected. The handler already treats every absent field as "leave it alone", so the
+ * nested objects are made partial to match.
+ */
+export const updateInstanceSchema = createInstanceSchema
+  .partial()
+  .omit({ id: true })
+  .extend({ teamspeak: createInstanceSchema.shape.teamspeak.partial().optional() });
 
 export interface InstanceAdminDependencies {
   readonly instances: InstanceManager;
