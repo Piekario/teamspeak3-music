@@ -27,6 +27,15 @@ export interface TrackRequest {
   readonly position?: number | undefined;
 }
 
+export interface PlaylistImport {
+  readonly title: string;
+  readonly queued: number;
+  readonly rejected: number;
+  readonly omitted: number;
+  /** The first title the queue refused, so the reply can name a concrete example. */
+  readonly firstRejection: string | null;
+}
+
 export type PlayRequestError = ResolveError | EnqueueError | { readonly kind: 'playback/no-resolver'; readonly url: string };
 export type ControlError = { readonly kind: 'playback/nothing-playing' } | { readonly kind: 'playback/illegal-transition' };
 
@@ -107,6 +116,54 @@ export class PlaybackService {
     else this.#publishState();
 
     return ok(resolved.value);
+  }
+
+  /**
+   * Queues every track of a playlist that the queue will accept.
+   *
+   * Partial success is the normal outcome — a per-user cap, a length limit or a livestream in
+   * the middle will each stop some entries — so the result reports what happened rather than
+   * failing the whole request or silently dropping entries. The caller can then say "queued
+   * 40 of 52" instead of leaving somebody to count.
+   */
+  /** Whether a link names a playlist, so callers can treat one as a playlist without asking. */
+  isPlaylistUrl(url: string): boolean {
+    return this.#options.resolvers.some((resolver) => resolver.isPlaylist(url));
+  }
+
+  async requestPlaylist(
+    url: string,
+    requester: Requester,
+    limit: number,
+  ): Promise<Result<PlaylistImport, PlayRequestError>> {
+    const resolver = this.#options.resolvers.find((candidate) => candidate.isPlaylist(url));
+    if (resolver === undefined) return err({ kind: 'playback/no-resolver', url });
+
+    const listing = await resolver.resolvePlaylist(url, limit);
+    if (!listing.ok) return listing;
+
+    const rejected: string[] = [];
+    let queued = 0;
+
+    for (const track of listing.value.tracks) {
+      const enqueued = this.#options.queue.enqueue(track, requester, this.#options.clock.now());
+      if (enqueued.ok) queued += 1;
+      else rejected.push(track.title);
+    }
+
+    if (queued > 0) {
+      this.#publishQueue();
+      if (!this.#options.session.isActive) await this.#advance();
+      else this.#publishState();
+    }
+
+    return ok({
+      title: listing.value.title,
+      queued,
+      rejected: rejected.length,
+      omitted: listing.value.omitted,
+      firstRejection: rejected[0] ?? null,
+    });
   }
 
   async search(query: string, limit: number): Promise<Result<readonly Track[], ResolveError>> {

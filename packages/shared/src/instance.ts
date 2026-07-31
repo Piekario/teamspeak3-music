@@ -33,7 +33,16 @@ export interface TeamSpeakTarget {
   readonly host: string;
   readonly port: number;
   readonly nickname: string;
-  /** Channel the bot returns to on `!leave` and joins on connect. */
+  /**
+   * Channel to join on connect, by name.
+   *
+   * A name rather than an id: ids change when a channel is recreated, and an operator types
+   * what they can see. Re-applied after every reconnect, because a server restart drops the
+   * bot back into the default channel.
+   */
+  readonly channel: string | null;
+  readonly channelPassword: string | null;
+  /** Channel the bot returns to on `!leave`. */
   readonly homeChannelId: number | null;
 }
 

@@ -22,6 +22,7 @@ import { Volume } from '../../playback/domain/values.ts';
 import type { BotClient } from '../domain/bot-client.ts';
 import type { InstanceConfig } from '../domain/instance.ts';
 import type { InstanceTransport } from '../domain/instance-transport.ts';
+import { ConnectionSupervisor } from './connection-supervisor.ts';
 
 export interface InstanceRuntimeDependencies {
   readonly config: InstanceConfig;
@@ -67,6 +68,7 @@ export interface RuntimeLogger {
 export class InstanceRuntime {
   readonly #deps: InstanceRuntimeDependencies;
   readonly #transport: InstanceTransport;
+  readonly #supervisor: ConnectionSupervisor;
   readonly #bot: BotClient;
   readonly #playback: PlaybackService;
   readonly #dispatcher: CommandDispatcher;
@@ -95,7 +97,21 @@ export class InstanceRuntime {
     const built = deps.buildTransport(this.#config, () => this.#onConnectionReady());
     this.#transport = built.transport;
     this.#bot = built.transport.bot;
-    this.#transport.onConnectionChange((state, error) => this.#setConnectionState(state, error));
+
+    // A separate concern from the transport's own socket reconnect: this one notices the bot
+    // being off the TeamSpeak *server* — a server restart, a network drop, a kick — where the
+    // transport itself is perfectly healthy and reports nothing wrong.
+    this.#supervisor = new ConnectionSupervisor({
+      instanceId: this.#config.id,
+      clock: deps.clock,
+      logger: deps.logger,
+      reconnect: () => this.#transport.start(),
+    });
+
+    this.#transport.onConnectionChange((state, error) => {
+      this.#setConnectionState(state, error);
+      this.#supervisor.observe(state);
+    });
 
     this.#queue = new Queue(this.#config.playback);
     const session = new PlaybackSession({
@@ -203,10 +219,14 @@ export class InstanceRuntime {
       this.#deps.logger.info('instance disabled, not connecting', { instance: this.#config.id });
       return;
     }
+    this.#supervisor.start();
     this.#transport.start();
   }
 
   async stop(): Promise<void> {
+    // Stopped before the transport, so the disconnect that follows is not mistaken for a
+    // failure and immediately undone.
+    this.#supervisor.stop();
     await this.#playback.shutdown();
     await this.#transport.stop();
     this.#setConnectionState('disconnected', null);

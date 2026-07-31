@@ -65,7 +65,14 @@ export function createInstanceConfig(raw: {
   id: string;
   name: string;
   enabled?: boolean;
-  teamspeak: { host: string; port?: number; nickname?: string; homeChannelId?: number | null };
+  teamspeak: {
+    host: string;
+    port?: number;
+    nickname?: string;
+    channel?: string | null;
+    channelPassword?: string | null;
+    homeChannelId?: number | null;
+  };
   serverPassword?: string | null;
   clientQuery: { host: string; port?: number; apiKey: string };
   audio: { pulseServer: string; sinkName?: string };
@@ -109,6 +116,8 @@ export function createInstanceConfig(raw: {
       host: raw.teamspeak.host,
       port: teamspeakPort,
       nickname: raw.teamspeak.nickname ?? 'MusicBot',
+      channel: raw.teamspeak.channel ?? null,
+      channelPassword: raw.teamspeak.channelPassword ?? null,
       homeChannelId: raw.teamspeak.homeChannelId ?? null,
     },
     serverPassword: raw.serverPassword ?? null,

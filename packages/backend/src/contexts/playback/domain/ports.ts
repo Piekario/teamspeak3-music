@@ -28,6 +28,18 @@ export interface ResolvedTrack {
   readonly expiresAt: Date | null;
 }
 
+export interface PlaylistListing {
+  readonly title: string;
+  readonly tracks: readonly Track[];
+  /**
+   * How many entries the playlist has beyond those returned.
+   *
+   * Reported rather than silently dropped: a listener who queues a 500-track playlist and
+   * gets 100 should be told, not left to wonder why it stopped.
+   */
+  readonly omitted: number;
+}
+
 export type ResolveError =
   | { readonly kind: 'resolve/not-found'; readonly query: string }
   | { readonly kind: 'resolve/unsupported-url'; readonly url: string }
@@ -44,6 +56,21 @@ export interface TrackResolver {
   supports(url: string): boolean;
   resolveUrl(url: string): Promise<Result<ResolvedTrack, ResolveError>>;
   search(query: string, limit: number): Promise<Result<readonly Track[], ResolveError>>;
+
+  /** Whether a URL names a collection of tracks rather than a single one. */
+  isPlaylist(url: string): boolean;
+
+  /**
+   * Lists a playlist's entries without resolving each one.
+   *
+   * Metadata only: resolving a hundred stream URLs up front would take minutes and most of
+   * them would expire before they played. Each entry is resolved when it reaches the front
+   * of the queue, exactly as a single track is.
+   */
+  resolvePlaylist(
+    url: string,
+    limit: number,
+  ): Promise<Result<PlaylistListing, ResolveError>>;
   /** Turns a queued track back into a fresh stream URL once the old one expired. */
   refresh(track: Track): Promise<Result<ResolvedTrack, ResolveError>>;
 }

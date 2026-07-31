@@ -3,7 +3,12 @@ import { execFile } from 'node:child_process';
 import type { Track } from '@tsmusic/shared';
 
 import { err, ok, type Result } from '../../../shared-kernel/result.ts';
-import type { ResolveError, ResolvedTrack, TrackResolver } from '../domain/ports.ts';
+import type {
+  PlaylistListing,
+  ResolveError,
+  ResolvedTrack,
+  TrackResolver,
+} from '../domain/ports.ts';
 
 export interface YtDlpResolverOptions {
   readonly binary: string;
@@ -76,6 +81,50 @@ export class YtDlpResolver implements TrackResolver {
 
   async refresh(track: Track): Promise<Result<ResolvedTrack, ResolveError>> {
     return this.resolveUrl(track.url);
+  }
+
+  /**
+   * A URL is a playlist when it carries a `list` parameter — including a watch URL opened
+   * from inside a playlist, which is how most people copy one.
+   */
+  isPlaylist(url: string): boolean {
+    if (!this.supports(url)) return false;
+    try {
+      return new URL(url).searchParams.has('list');
+    } catch {
+      return false;
+    }
+  }
+
+  async resolvePlaylist(
+    url: string,
+    limit: number,
+  ): Promise<Result<PlaylistListing, ResolveError>> {
+    // `--flat-playlist` lists entries without visiting each video. On a long playlist that is
+    // the difference between a second and several minutes, and the per-video metadata would
+    // be stale by the time most entries played anyway.
+    //
+    // One more than the limit is requested so the count of omitted entries is truthful
+    // rather than a guess.
+    const output = await this.#runJson([
+      '--flat-playlist',
+      '--yes-playlist',
+      '-I',
+      `1:${Math.max(1, Math.trunc(limit)) + 1}`,
+      url,
+    ]);
+    if (!output.ok) return output;
+
+    const root = output.value as { title?: string; entries?: readonly YtDlpEntry[] } | undefined;
+    const entries = root?.entries ?? [];
+    if (entries.length === 0) return err({ kind: 'resolve/not-found', query: url });
+
+    const kept = entries.slice(0, limit);
+    return ok({
+      title: root?.title ?? 'Playlist',
+      tracks: kept.map(toTrack),
+      omitted: Math.max(0, entries.length - kept.length),
+    });
   }
 
   async search(query: string, limit: number): Promise<Result<readonly Track[], ResolveError>> {

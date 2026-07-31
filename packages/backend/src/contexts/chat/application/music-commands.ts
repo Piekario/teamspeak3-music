@@ -313,6 +313,9 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
   ];
 }
 
+/** How many playlist entries one request may add, regardless of the playlist's length. */
+const PLAYLIST_IMPORT_LIMIT = 100;
+
 async function enqueue(
   deps: MusicCommandDependencies,
   context: CommandContext,
@@ -320,6 +323,32 @@ async function enqueue(
 ) {
   const input = context.command.argumentText;
   if (input.length === 0) return reply('What should I play?');
+
+  // A playlist link is handled as a playlist without a separate command: pasting one and
+  // getting only its first track is a surprise nobody wants.
+  if (looksLikeUrl(input) && deps.playback.isPlaylistUrl(input)) {
+    const imported = await deps.playback.requestPlaylist(
+      input,
+      { uid: context.invoker.uid, nickname: context.invoker.nickname },
+      PLAYLIST_IMPORT_LIMIT,
+    );
+
+    if (!imported.ok) return reply(describeRequestFailure(imported.error));
+
+    const { title, queued, rejected, omitted } = imported.value;
+    if (queued === 0) {
+      return reply(`Nothing from "${title}" could be queued.`);
+    }
+
+    const notes: string[] = [];
+    if (rejected > 0) notes.push(`${rejected} refused`);
+    if (omitted > 0) notes.push(`${omitted} beyond the ${PLAYLIST_IMPORT_LIMIT}-track limit`);
+
+    return reply(
+      `Queued ${queued} track${queued === 1 ? '' : 's'} from "${title}"` +
+        (notes.length > 0 ? ` (${notes.join(', ')}).` : '.'),
+    );
+  }
 
   const request = looksLikeUrl(input) ? { url: input } : { query: input };
   const queued = await deps.playback.request(

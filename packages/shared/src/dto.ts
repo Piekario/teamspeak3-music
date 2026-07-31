@@ -39,6 +39,15 @@ export const queueMoveSchema = z.object({
   toIndex: z.number().int().min(0),
 });
 
+/**
+ * Importing a playlist. The limit is capped rather than open-ended: a thousand-entry
+ * playlist would take minutes to list and swamp the queue for everyone else.
+ */
+export const playlistImportSchema = z.object({
+  url: z.string().url(),
+  limit: z.number().int().min(1).max(200).default(100),
+});
+
 export const searchQuerySchema = z.object({
   q: z.string().min(1).max(200),
   limit: z.coerce.number().int().min(1).max(25).default(5),

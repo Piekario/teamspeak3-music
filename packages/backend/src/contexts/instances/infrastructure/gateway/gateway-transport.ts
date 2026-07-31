@@ -108,8 +108,11 @@ export class GatewayTransport implements InstanceTransport {
       port: config.teamspeak.port,
       nickname: config.teamspeak.nickname,
       serverPassword: config.serverPassword,
-      channel: null,
-      channelPassword: null,
+      // Passed on every create, which is also every reconnect: a server restart drops the
+      // bot into the default channel, so rejoining has to be part of connecting rather than
+      // a one-off at first start.
+      channel: config.teamspeak.channel,
+      channelPassword: config.teamspeak.channelPassword,
       identity: identity.key,
       identityOffset: identity.offset,
     });

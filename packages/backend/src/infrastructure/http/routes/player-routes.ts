@@ -1,6 +1,7 @@
 import {
   instanceIdParamSchema,
   repeatSchema,
+  playlistImportSchema,
   searchQuerySchema,
   seekSchema,
   trackRequestSchema,
@@ -71,6 +72,22 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
     const moved = runtimeOf(instanceId).playback.moveInQueue(itemId, toIndex);
     if (!moved.ok) throw httpError(404, describe(moved.error), moved.error);
     return response.status(204).send();
+  });
+
+  app.post('/api/instances/:instanceId/queue/playlist', async (request) => {
+    const { instanceId } = instanceIdParamSchema.parse(request.params);
+    const { url, limit } = playlistImportSchema.parse(request.body);
+
+    const imported = await runtimeOf(instanceId).playback.requestPlaylist(
+      url,
+      { uid: 'panel', nickname: 'Web panel' },
+      limit,
+    );
+
+    if (!imported.ok) throw httpError(422, describe(imported.error), imported.error);
+    // Partial success is the normal outcome, so the counts are the response rather than a
+    // bare 204 that hides how much was actually queued.
+    return imported.value;
   });
 
   app.post('/api/instances/:instanceId/queue/shuffle', async (request, response) => {
