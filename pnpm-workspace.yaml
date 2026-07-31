@@ -1,2 +1,11 @@
 packages:
   - 'packages/*'
+
+# pnpm 10 refuses to run a dependency's install scripts unless it is listed here, and this
+# setting lives in the workspace file rather than package.json since pnpm 10.
+#
+# better-sqlite3 fetches or compiles its native binding in that step. Without this it
+# installs perfectly cleanly and then throws "Could not locate the bindings file" at the
+# first query — which happens at startup, in production, long after the install looked fine.
+onlyBuiltDependencies:
+  - better-sqlite3
