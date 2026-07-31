@@ -23,6 +23,7 @@ import type { BotClient } from '../domain/bot-client.ts';
 import type { InstanceConfig } from '../domain/instance.ts';
 import type { InstanceTransport } from '../domain/instance-transport.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
+import { SoloWatcher } from './solo-watcher.ts';
 
 export interface InstanceRuntimeDependencies {
   readonly config: InstanceConfig;
@@ -69,6 +70,7 @@ export class InstanceRuntime {
   readonly #deps: InstanceRuntimeDependencies;
   readonly #transport: InstanceTransport;
   readonly #supervisor: ConnectionSupervisor;
+  readonly #soloWatcher: SoloWatcher;
   readonly #bot: BotClient;
   readonly #playback: PlaybackService;
   readonly #dispatcher: CommandDispatcher;
@@ -111,6 +113,23 @@ export class InstanceRuntime {
     this.#transport.onConnectionChange((state, error) => {
       this.#setConnectionState(state, error);
       this.#supervisor.observe(state);
+    });
+
+    this.#soloWatcher = new SoloWatcher({
+      instanceId: this.#config.id,
+      logger: deps.logger,
+      listChannelClients: () => this.#bot.listChannelClients(),
+      // Read through a getter rather than captured, so toggling the setting takes effect
+      // without restarting the instance.
+      isEnabled: () => this.#config.playback.pauseWhenAlone,
+      isPlaying: () => this.#playback.session.status === 'playing',
+      isPaused: () => this.#playback.session.status === 'paused',
+      pause: async () => {
+        await this.#playback.pause();
+      },
+      resume: async () => {
+        await this.#playback.resume();
+      },
     });
 
     this.#queue = new Queue(this.#config.playback);
@@ -220,6 +239,7 @@ export class InstanceRuntime {
       return;
     }
     this.#supervisor.start();
+    this.#soloWatcher.start();
     this.#transport.start();
   }
 
@@ -227,6 +247,7 @@ export class InstanceRuntime {
     // Stopped before the transport, so the disconnect that follows is not mistaken for a
     // failure and immediately undone.
     this.#supervisor.stop();
+    this.#soloWatcher.stop();
     await this.#playback.shutdown();
     await this.#transport.stop();
     this.#setConnectionState('disconnected', null);

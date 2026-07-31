@@ -100,6 +100,7 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
           ...(channelPassword === '' ? {} : { channelPassword }),
         },
         ...(serverPassword === '' ? {} : { serverPassword }),
+        playback: { pauseWhenAlone: form.playback?.pauseWhenAlone ?? false },
         // Identities are passed through untouched: this screen edits group grants, and
         // sending an empty object would revoke every individual grant as a side effect.
         grants: { serverGroups: groups, identities: form.grants?.identities ?? {} },
@@ -298,6 +299,37 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
               onChange={(event) => setChannelPassword(event.target.value)}
             />
           </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Playback</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 accent-primary"
+              checked={form.playback?.pauseWhenAlone ?? false}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  playback: { ...form.playback, pauseWhenAlone: event.target.checked },
+                })
+              }
+            />
+            <span>
+              <span className="text-sm font-medium leading-none">
+                Pause when nobody is listening
+              </span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Pauses while the bot is alone in its channel and resumes when somebody
+                returns. A pause you made yourself is never overridden. Leave off for a bot
+                that is meant to keep broadcasting to an empty room.
+              </span>
+            </span>
+          </label>
         </CardContent>
       </Card>
 

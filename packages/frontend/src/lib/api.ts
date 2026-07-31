@@ -85,7 +85,12 @@ export interface InstanceDetail {
   };
   hasChannelPassword?: boolean;
   hasServerPassword?: boolean;
-  playback: { defaultVolume: number; maxTrackSeconds: number; maxPerUser: number };
+  playback?: {
+    defaultVolume?: number;
+    maxTrackSeconds?: number;
+    maxPerUser?: number;
+    pauseWhenAlone?: boolean;
+  };
   commands: { prefix: string; requireSameChannel: boolean };
   permissions: { defaultRole: Role; whitelistOnly: boolean };
   /** Optional: a backend one deploy behind the panel omits it. */
@@ -102,6 +107,7 @@ export interface UpdateInstanceBody {
     channelPassword?: string;
   };
   serverPassword?: string;
+  playback?: { pauseWhenAlone?: boolean };
   grants?: { serverGroups: Record<string, Role>; identities: Record<string, Role> };
 }
 

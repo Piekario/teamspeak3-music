@@ -44,6 +44,14 @@ export interface PlaybackSettings extends QueueLimits {
   readonly defaultVolume: number;
   readonly voteSkipEnabled: boolean;
   readonly voteSkipRatio: number;
+  /**
+   * Pause while the bot is the only one in its channel, and resume when somebody returns.
+   *
+   * Off by default: a bot that is deliberately broadcasting to an empty room — a radio
+   * channel people drop into — would otherwise fall silent exactly when nobody is there to
+   * notice why.
+   */
+  readonly pauseWhenAlone: boolean;
 }
 
 export interface CommandSettings {
@@ -137,6 +145,7 @@ export function createInstanceConfig(raw: {
       allowLiveStreams: raw.playback?.allowLiveStreams ?? false,
       voteSkipEnabled: raw.playback?.voteSkipEnabled ?? false,
       voteSkipRatio: raw.playback?.voteSkipRatio ?? 0.5,
+      pauseWhenAlone: raw.playback?.pauseWhenAlone ?? false,
     },
     commands: {
       prefix: raw.commands?.prefix ?? '!',

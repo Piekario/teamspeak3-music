@@ -34,6 +34,12 @@ const createInstanceSchema = z.object({
     homeChannelId: z.number().int().min(0).nullable().default(null),
   }),
   serverPassword: z.string().nullable().default(null),
+  playback: z
+    .object({
+      pauseWhenAlone: z.boolean(),
+    })
+    .partial()
+    .optional(),
   /** Which TeamSpeak server groups may use the bot, and in what role. */
   grants: z
     .object({
@@ -119,7 +125,10 @@ export function registerInstanceAdminRoutes(
         body.serverPassword === undefined ? current.serverPassword : body.serverPassword,
       clientQuery: current.clientQuery,
       audio: current.audio,
-      playback: current.playback,
+      playback: {
+        ...current.playback,
+        pauseWhenAlone: body.playback?.pauseWhenAlone ?? current.playback.pauseWhenAlone,
+      },
       commands: current.commands,
       permissions: current.permissions,
       // Absent means "leave the grants alone"; an empty object means "revoke everything",
