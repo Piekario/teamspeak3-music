@@ -1,4 +1,6 @@
 import { InstanceManager } from './contexts/instances/application/instance-manager.ts';
+import { openDatabase } from './infrastructure/persistence/database.ts';
+import { DrizzleInstanceRepository } from './infrastructure/persistence/drizzle-instance-repository.ts';
 import { GatewayConnection } from './contexts/instances/infrastructure/gateway/gateway-connection.ts';
 import { buildTransport } from './composition/create-transport.ts';
 import { YtDlpResolver } from './contexts/playback/infrastructure/ytdlp-resolver.ts';
@@ -29,10 +31,18 @@ async function main(): Promise<void> {
   const logger = createLogger(config.LOG_LEVEL);
   const scoped = scopedLogger(logger, { component: 'app' });
 
-  const instanceConfigs = loadInstanceConfigs(config.INSTANCES_FILE);
-  if (!instanceConfigs.ok) {
-    scoped.error(describeInstanceFileError(instanceConfigs.error));
-    process.exit(1);
+  /**
+   * The file is a seed, not the source of truth.
+   *
+   * Instances created through the panel live in the database, so an absent or empty file is
+   * an ordinary state rather than a fatal one — it only becomes fatal if there is nothing in
+   * either place, which is checked once both have been read.
+   */
+  const seedConfigs = loadInstanceConfigs(config.INSTANCES_FILE);
+  if (!seedConfigs.ok) {
+    scoped.info('no usable instances file; relying on stored instances', {
+      detail: describeInstanceFileError(seedConfigs.error),
+    });
   }
 
   // A throwing subscriber must never take down playback, so the bus reports rather than
@@ -55,13 +65,24 @@ async function main(): Promise<void> {
     }),
   ];
 
+  const { db, close: closeDatabase } = openDatabase(config.DATABASE_PATH);
+  const instanceRepository = new DrizzleInstanceRepository(
+    db,
+    scopedLogger(logger, { component: 'db' }),
+  );
+
   /**
-   * Identities issued by the gateway are held in memory for now — a deliberate stop short of
-   * persistence. A restart currently costs each bot its identity and therefore whatever
-   * server groups an admin granted it, which is precisely what the instances table is for
-   * once instance CRUD lands.
+   * Identities are cached in memory and written through to storage.
+   *
+   * The cache exists because the transport asks for an identity synchronously while building
+   * a bot; the write is what makes a bot the same person to the server after a restart,
+   * keeping the server groups an admin granted it.
    */
   const identities = new Map<string, { key: string | null; offset: number }>();
+  for (const stored of await instanceRepository.list()) {
+    const identity = await instanceRepository.readIdentity(stored.id);
+    identities.set(stored.id, { key: identity.key, offset: identity.offset });
+  }
 
   // The gateway holds every bot in one process, so one connection serves them all. The
   // ClientQuery transport instead opens a socket per instance, and needs none of this.
@@ -97,6 +118,16 @@ async function main(): Promise<void> {
           onIdentityIssued: (instanceId, key, offset, uid) => {
             identities.set(instanceId, { key, offset });
             scoped.info('gateway issued a bot identity', { instance: instanceId, uid });
+            // Written through immediately: this is issued once, and losing it before the
+            // next restart would cost the bot its server groups.
+            void instanceRepository
+              .saveIdentity(instanceId, { key, offset, uid })
+              .catch((error: unknown) => {
+                scoped.error('could not persist the bot identity', {
+                  instance: instanceId,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+              });
           },
         },
         instanceConfig,
@@ -106,12 +137,27 @@ async function main(): Promise<void> {
 
   gateway?.connect();
 
-  for (const instanceConfig of instanceConfigs.value) {
+  // Stored instances win over seeds of the same id: once a bot has been edited in the panel,
+  // the file version is stale by definition.
+  const stored = await instanceRepository.list();
+  const storedIds = new Set(stored.map((instance) => instance.id));
+  const seeds = seedConfigs.ok
+    ? seedConfigs.value.filter((instance) => !storedIds.has(instance.id))
+    : [];
+
+  // Seeds are persisted on first sight, so the file is needed exactly once.
+  for (const seed of seeds) await instanceRepository.save(seed);
+
+  for (const instanceConfig of [...stored, ...seeds]) {
     const added = instances.add(instanceConfig);
     if (!added.ok) {
-      scoped.error('duplicate instance id in configuration', { id: instanceConfig.id });
+      scoped.error('duplicate instance id', { id: instanceConfig.id });
       process.exit(1);
     }
+  }
+
+  if (instances.ids.length === 0) {
+    scoped.warn('no instances configured; create one through the panel or seed instances.json');
   }
 
   const server = await createHttpServer({
@@ -119,6 +165,7 @@ async function main(): Promise<void> {
     port: config.HTTP_PORT,
     adminToken: config.ADMIN_TOKEN,
     instances,
+    instanceRepository,
     events,
     clock: systemClock,
     logger,

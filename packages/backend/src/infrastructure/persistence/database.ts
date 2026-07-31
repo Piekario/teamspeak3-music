@@ -28,10 +28,45 @@ export function openDatabase(path: string): { db: Db; close: () => void } {
   connection.pragma('busy_timeout = 5000');
   connection.pragma('synchronous = NORMAL');
 
+  ensureSchema(connection);
+
   return {
     db: drizzle(connection, { schema }),
     close: () => connection.close(),
   };
+}
+
+/**
+ * Creates the tables the application needs if they are absent.
+ *
+ * A stopgap, and worth naming as one: the proper answer is generated `drizzle-kit`
+ * migrations, which handle column changes rather than only first creation. This exists so a
+ * fresh database works out of the box, and it is deliberately additive — it will never alter
+ * or drop an existing column, so a schema change still needs a real migration.
+ */
+function ensureSchema(connection: Database.Database): void {
+  connection.exec(`
+    CREATE TABLE IF NOT EXISTS instances (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      teamspeak_host TEXT NOT NULL,
+      teamspeak_port INTEGER NOT NULL DEFAULT 9987,
+      server_password TEXT,
+      nickname TEXT NOT NULL DEFAULT 'MusicBot',
+      home_channel_id INTEGER,
+      client_query_host TEXT,
+      client_query_port INTEGER DEFAULT 25639,
+      client_query_api_key TEXT,
+      pulse_server TEXT,
+      sink_name TEXT DEFAULT 'bot_sink',
+      identity_key TEXT,
+      identity_offset INTEGER NOT NULL DEFAULT 0,
+      identity_uid TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 }
 
 export { schema };

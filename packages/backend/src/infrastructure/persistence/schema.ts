@@ -20,12 +20,24 @@ export const instances = sqliteTable('instances', {
   nickname: text('nickname').notNull().default('MusicBot'),
   homeChannelId: integer('home_channel_id'),
 
-  clientQueryHost: text('client_query_host').notNull(),
-  clientQueryPort: integer('client_query_port').notNull().default(25639),
-  clientQueryApiKey: text('client_query_api_key').notNull(),
+  // ClientQuery transport: one headless client per bot, addressed over a socket.
+  clientQueryHost: text('client_query_host'),
+  clientQueryPort: integer('client_query_port').default(25639),
+  clientQueryApiKey: text('client_query_api_key'),
 
-  pulseServer: text('pulse_server').notNull(),
-  sinkName: text('sink_name').notNull().default('bot_sink'),
+  pulseServer: text('pulse_server'),
+  sinkName: text('sink_name').default('bot_sink'),
+
+  /**
+   * Gateway transport: the bot's TeamSpeak identity, generated in code on first connect.
+   *
+   * This is the single most important thing to persist. A bot's unique id is derived from
+   * this key, and server groups and permissions are granted against that id — so losing it
+   * means the bot comes back as a stranger and every grant an admin made has to be redone.
+   */
+  identityKey: text('identity_key'),
+  identityOffset: integer('identity_offset').notNull().default(0),
+  identityUid: text('identity_uid'),
 
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),

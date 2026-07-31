@@ -8,6 +8,8 @@ import type { EventSubscriber } from '../../shared-kernel/event-bus.ts';
 import type { Logger, ScopedLogger } from '../logging/logger.ts';
 import { extractToken, tokenMatches } from './auth.ts';
 import { HttpError, toErrorResponse } from './errors.ts';
+import type { InstanceRepository } from '../../contexts/instances/domain/instance-repository.ts';
+import { registerInstanceAdminRoutes } from './routes/instance-admin-routes.ts';
 import { registerInstanceRoutes } from './routes/instance-routes.ts';
 import { registerPlayerRoutes } from './routes/player-routes.ts';
 import { WebSocketHub, type WebSocketLike } from './websocket-hub.ts';
@@ -17,6 +19,11 @@ export interface HttpServerOptions {
   readonly port: number;
   readonly adminToken: string;
   readonly instances: InstanceManager;
+  /**
+   * Enables the instance management routes. Omitted when instances come from a read-only
+   * file, so the panel cannot offer to create bots that would vanish on the next restart.
+   */
+  readonly instanceRepository?: InstanceRepository | undefined;
   readonly events: EventSubscriber;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -60,6 +67,12 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
   registerInstanceRoutes(app, options.instances);
   registerPlayerRoutes(app, options.instances);
+  if (options.instanceRepository !== undefined) {
+    registerInstanceAdminRoutes(app, {
+      instances: options.instances,
+      repository: options.instanceRepository,
+    });
+  }
 
   app.get('/ws', { websocket: true }, (socket) => {
     const client = socket as unknown as WebSocketLike;
