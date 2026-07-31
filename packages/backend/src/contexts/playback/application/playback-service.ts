@@ -47,6 +47,13 @@ export interface PlaybackServiceOptions {
   readonly audio: AudioOutput;
   readonly volume: VolumeController;
   readonly events: EventPublisher;
+  /**
+   * Called when the queue has run dry and playback has gone idle.
+   *
+   * Deliberately not called after a `stop`: stopping is an explicit "that is enough", and
+   * refilling on the back of it would make the command look broken.
+   */
+  readonly onQueueExhausted?: (() => Promise<void>) | undefined;
   readonly clock: Clock;
   readonly logger: {
     debug(message: string, details?: Record<string, unknown>): void;
@@ -81,6 +88,23 @@ export class PlaybackService {
   /** Guards against two concurrent advances — a skip racing a natural end. */
   #advancing = false;
 
+  /**
+   * Set by `stop`, cleared the moment anything is queued again.
+   *
+   * Without it, a default playlist would start up again the instant somebody used `!stop`,
+   * making the command appear not to work at all.
+   */
+  #stoppedDeliberately = false;
+
+  /**
+   * Guards the refill loop.
+   *
+   * A default playlist whose tracks are all unplayable would otherwise exhaust the queue,
+   * refill it, exhaust it again and spin forever. Refilling is allowed only once until
+   * something actually starts playing, which is the only proof the refill was worth anything.
+   */
+  #refillArmed = true;
+
   constructor(options: PlaybackServiceOptions) {
     this.#options = options;
   }
@@ -111,11 +135,21 @@ export class PlaybackService {
     );
     if (!enqueued.ok) return enqueued;
 
+    // Queueing something is fresh intent: it overrides an earlier stop and re-arms the
+    // refill guard, so a default playlist works again after a manual track finishes.
+    this.#stoppedDeliberately = false;
+    this.#refillArmed = true;
+
     this.#publishQueue();
     if (!this.#options.session.isActive) await this.#advance();
     else this.#publishState();
 
     return ok(resolved.value);
+  }
+
+  /** Whether a link names a playlist, so callers can treat one as a playlist without asking. */
+  isPlaylistUrl(url: string): boolean {
+    return this.#options.resolvers.some((resolver) => resolver.isPlaylist(url));
   }
 
   /**
@@ -126,11 +160,6 @@ export class PlaybackService {
    * failing the whole request or silently dropping entries. The caller can then say "queued
    * 40 of 52" instead of leaving somebody to count.
    */
-  /** Whether a link names a playlist, so callers can treat one as a playlist without asking. */
-  isPlaylistUrl(url: string): boolean {
-    return this.#options.resolvers.some((resolver) => resolver.isPlaylist(url));
-  }
-
   async requestPlaylist(
     url: string,
     requester: Requester,
@@ -152,6 +181,8 @@ export class PlaybackService {
     }
 
     if (queued > 0) {
+      this.#stoppedDeliberately = false;
+      this.#refillArmed = true;
       this.#publishQueue();
       if (!this.#options.session.isActive) await this.#advance();
       else this.#publishState();
@@ -231,6 +262,9 @@ export class PlaybackService {
   }
 
   async stop(): Promise<void> {
+    // Marked before anything else: the queue emptying as a result must not be mistaken for
+    // natural exhaustion and answered with a refill.
+    this.#stoppedDeliberately = true;
     const ended = this.#options.session.stop();
     await this.#stopAudio();
     if (ended !== null) this.#publishTrackEnded(ended, 'stopped');
@@ -316,6 +350,9 @@ export class PlaybackService {
         if (!claimed.ok) {
           this.#publishQueue();
           this.#publishState();
+          // Announced only once the queue is genuinely exhausted, and never after a stop,
+          // which is an explicit "that is enough" rather than an invitation to refill.
+          if (!this.#stoppedDeliberately) await this.#announceExhausted();
           return;
         }
 
@@ -336,6 +373,35 @@ export class PlaybackService {
     }
   }
 
+  /**
+   * Lets whoever owns the default playlist top the queue up, then plays what arrived.
+   *
+   * Re-entry is prevented by clearing the guard before calling out and by the `#advancing`
+   * flag the caller already holds, so a refill that queues tracks resumes playback through
+   * an explicit second advance rather than recursing.
+   */
+  async #announceExhausted(): Promise<void> {
+    const refill = this.#options.onQueueExhausted;
+    if (refill === undefined || !this.#refillArmed) return;
+
+    this.#refillArmed = false;
+    try {
+      await refill();
+    } catch (error) {
+      this.#options.logger.warn('refilling the queue failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    if (this.#options.queue.isEmpty) return;
+
+    // Released before recursing so the nested advance can queue work of its own.
+    this.#advancing = false;
+    await this.#advance();
+    this.#advancing = true;
+  }
+
   async #startCurrent(track: Track, fromSec: number): Promise<boolean> {
     const started = await this.#startAudioFor(track, fromSec);
     if (!started.ok) {
@@ -343,6 +409,8 @@ export class PlaybackService {
       return false;
     }
     this.#options.session.markStarted(fromSec);
+    // Something played, which is the only evidence a refill was worth making.
+    this.#refillArmed = true;
     return true;
   }
 

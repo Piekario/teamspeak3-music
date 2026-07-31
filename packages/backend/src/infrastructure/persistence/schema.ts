@@ -115,16 +115,36 @@ export const commandPolicies = sqliteTable(
   }),
 );
 
-/** Playlists are global on purpose: content is worth sharing between bots. */
-export const playlists = sqliteTable('playlists', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  description: text('description'),
-  ownerUid: text('owner_uid'),
-  isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-});
+/**
+ * Playlists belong to an instance.
+ *
+ * Originally global, on the theory that content is worth sharing. In practice a preset is
+ * tied to a room's taste and to the server groups allowed to load it, and a bot offering
+ * another community's playlists is noise rather than a feature.
+ */
+export const playlists = sqliteTable(
+  'playlists',
+  {
+    id: text('id').primaryKey(),
+    instanceId: text('instance_id')
+      .notNull()
+      .references(() => instances.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    ownerUid: text('owner_uid'),
+    /**
+     * Played when the queue runs dry. At most one per instance, enforced when setting it
+     * rather than by a constraint, so promoting a playlist demotes the previous one in the
+     * same operation instead of failing.
+     */
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => ({
+    uniqueName: uniqueIndex('playlists_instance_name').on(table.instanceId, table.name),
+  }),
+);
 
 export const playlistTracks = sqliteTable(
   'playlist_tracks',

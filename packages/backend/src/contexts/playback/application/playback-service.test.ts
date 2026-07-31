@@ -330,6 +330,100 @@ describe('PlaybackService failure handling', () => {
   });
 });
 
+describe('PlaybackService queue refill', () => {
+  /** Builds a service whose exhaustion hook queues from a scripted "default playlist". */
+  function buildWithRefill(playlist: readonly string[]) {
+    const clock = new FakeClock(0);
+    const queue = new Queue(DEFAULT_QUEUE_LIMITS);
+    const session = new PlaybackSession({ queue, clock });
+    const audio = new FakeAudio();
+    let refills = 0;
+
+    const service = new PlaybackService({
+      instanceId: 'party',
+      session,
+      queue,
+      resolvers: [new FakeResolver()],
+      audio,
+      volume: new FakeVolume(),
+      events: { publish: () => {} },
+      clock,
+      logger: silentLogger,
+      onQueueExhausted: async () => {
+        refills += 1;
+        for (const title of playlist) {
+          queue.enqueue(track({ title, url: `https://youtu.be/${title}` }), alice, new Date(0));
+        }
+      },
+    });
+
+    return { service, session, audio, queue, refills: () => refills };
+  }
+
+  it('asks for a refill once the queue runs dry', async () => {
+    const { service, audio, refills, session } = buildWithRefill(['Default One']);
+    await service.request({ url: 'https://youtu.be/first' }, alice);
+
+    audio.endStream({ kind: 'completed' });
+    // The refill chain is several awaits deep: exhaustion, the hook, then a nested advance.
+    await settle();
+    await settle();
+
+    assert.equal(refills(), 1);
+    assert.equal(session.current?.track.title, 'Default One', 'and plays what arrived');
+  });
+
+  it('never refills after a deliberate stop', async () => {
+    // Otherwise !stop looks broken: the music comes straight back.
+    const { service, refills } = buildWithRefill(['Default One']);
+    await service.request({ url: 'https://youtu.be/first' }, alice);
+
+    await service.stop();
+    await settle();
+
+    assert.equal(refills(), 0);
+  });
+
+  it('refills again once somebody queues something after a stop', async () => {
+    const { service, audio, refills } = buildWithRefill(['Default One']);
+    await service.request({ url: 'https://youtu.be/first' }, alice);
+    await service.stop();
+
+    await service.request({ url: 'https://youtu.be/second' }, alice);
+    audio.endStream({ kind: 'completed' });
+    await settle();
+
+    assert.equal(refills(), 1, 'queueing is fresh intent that overrides the earlier stop');
+  });
+
+  it('does not spin when the refill yields nothing playable', async () => {
+    // A default playlist of dead links would otherwise exhaust, refill, exhaust, forever.
+    const { service, audio, refills } = buildWithRefill([]);
+    await service.request({ url: 'https://youtu.be/first' }, alice);
+
+    audio.endStream({ kind: 'completed' });
+    await settle();
+
+    assert.equal(refills(), 1, 'exactly one attempt, then it stays quiet');
+  });
+
+  it('re-arms only once something actually played', async () => {
+    const { service, audio, refills } = buildWithRefill(['Default One']);
+    await service.request({ url: 'https://youtu.be/first' }, alice);
+
+    audio.endStream({ kind: 'completed' });
+    await settle();
+    await settle();
+    assert.equal(refills(), 1);
+
+    // The refilled track finishes; a second refill is legitimate because playback happened.
+    audio.endStream({ kind: 'completed' });
+    await settle();
+    await settle();
+    assert.equal(refills(), 2);
+  });
+});
+
 describe('PlaybackService events', () => {
   it('stamps every event with the instance it belongs to', async () => {
     const { service, events } = build();

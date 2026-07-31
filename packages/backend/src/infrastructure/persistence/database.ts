@@ -66,6 +66,39 @@ function ensureSchema(connection: Database.Database): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS playlists (
+      id TEXT PRIMARY KEY,
+      instance_id TEXT NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      owner_uid TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    -- Names identify a playlist in chat, so they have to be unique within an instance for
+    -- "playlist load party" to mean exactly one thing.
+    CREATE UNIQUE INDEX IF NOT EXISTS playlists_instance_name
+      ON playlists (instance_id, name COLLATE NOCASE);
+
+    CREATE TABLE IF NOT EXISTS playlist_tracks (
+      id TEXT PRIMARY KEY,
+      playlist_id TEXT NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      uploader TEXT,
+      duration_sec INTEGER,
+      thumbnail_url TEXT,
+      added_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS playlist_tracks_playlist
+      ON playlist_tracks (playlist_id, position);
   `);
 }
 
