@@ -63,6 +63,10 @@ public sealed record MoveChannelPayload(
 public sealed record NicknamePayload(
     [property: JsonPropertyName("nickname")] string Nickname);
 
+/// <summary>Percent, where 100 is unity gain; above that amplifies a quiet source.</summary>
+public sealed record VolumePayload(
+    [property: JsonPropertyName("volume")] int Volume);
+
 // ─── results and events ─────────────────────────────────────────────────────
 
 public sealed record BotCreatedResult(

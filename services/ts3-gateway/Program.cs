@@ -164,21 +164,26 @@ static async Task<Response> HandleAsync(
             return Reply(request.Id, renamed);
         }
 
-        // Reads are answered from TSLib's local book, so they cost nothing on the wire.
+        // Reads come from TSLib's local book, so they cost nothing on the wire — but they are
+        // still marshalled onto the bot's scheduler, since the book is mutated there.
         case "bot.whoami":
-            return new Response(request.Id, true, Session().WhoAmI());
+            return new Response(request.Id, true, await Session().WhoAmIAsync());
 
         case "bot.currentChannel":
-            return new Response(request.Id, true, Session().CurrentChannel());
+            return new Response(request.Id, true, await Session().CurrentChannelAsync());
 
         case "bot.listChannels":
-            return new Response(request.Id, true, Session().ListChannels());
+            return new Response(request.Id, true, await Session().ListChannelsAsync());
 
         case "bot.listChannelClients":
-            return new Response(request.Id, true, Session().ListChannelClients());
+            return new Response(request.Id, true, await Session().ListChannelClientsAsync());
 
         case "bot.status":
             return new Response(request.Id, true, new StatusEvent(Session().Connection, null));
+
+        case "bot.setVolume":
+            Session().SetVolume(Payload<VolumePayload>().Volume);
+            return new Response(request.Id, true);
 
         default:
             return new Response(request.Id, false, Error: $"unknown command '{request.Command}'");

@@ -3,6 +3,7 @@ using TSLib;
 using TSLib.Audio;
 using TSLib.Full;
 using TSLib.Helper;
+using TSLib.Scheduler;
 using TsMusic.Gateway.Protocol;
 
 namespace TsMusic.Gateway.Bots;
@@ -18,7 +19,17 @@ namespace TsMusic.Gateway.Bots;
 /// </summary>
 public sealed class BotSession : IAsyncDisposable
 {
-    private readonly TsFullClient _client = new();
+    /// <summary>
+    /// TSLib is not thread-agnostic: every connection and command must run on the client's
+    /// own scheduler thread, and calling from anywhere else throws
+    /// <c>TaskSchedulerException: Cannot call from an outside thread</c> rather than working
+    /// by accident. Each bot therefore owns a scheduler and marshals its calls onto it.
+    ///
+    /// <see cref="TsFullClient.SendAudio"/> is the deliberate exception — it does not verify
+    /// the thread, because audio arrives from a separate pipeline by design.
+    /// </summary>
+    private readonly DedicatedTaskScheduler _scheduler;
+    private readonly TsFullClient _client;
     private readonly Action<Event> _publish;
     private readonly ILogger _logger;
 
@@ -30,6 +41,15 @@ public sealed class BotSession : IAsyncDisposable
     /// </summary>
     private EncoderPipe? _encoder;
 
+    /// <summary>
+    /// Applied to raw samples before encoding.
+    ///
+    /// On the PulseAudio transport volume was a sink setting, which made it instant and free.
+    /// Here it has to live in the pipeline, so it is placed ahead of the encoder: scaling
+    /// PCM is cheap and correct, whereas re-encoding to change level would not be.
+    /// </summary>
+    private VolumePipe? _volume;
+
     public string BotId { get; }
     public IdentityData Identity { get; private set; }
     public string Connection { get; private set; } = "disconnected";
@@ -40,6 +60,9 @@ public sealed class BotSession : IAsyncDisposable
         Identity = identity;
         _publish = publish;
         _logger = logger;
+
+        _scheduler = new DedicatedTaskScheduler(Id.Null);
+        _client = new TsFullClient(_scheduler);
 
         _client.OnTextMessage += OnTextMessage;
         _client.OnClientPoke += OnClientPoke;
@@ -63,7 +86,7 @@ public sealed class BotSession : IAsyncDisposable
             defaultChannel: payload.Channel ?? string.Empty,
             defaultChannelPassword: Password.FromPlain(payload.ChannelPassword ?? string.Empty));
 
-        var result = await _client.Connect(connectionData);
+        var result = await _scheduler.InvokeAsync(() => _client.Connect(connectionData));
         if (!result.Ok)
         {
             var message = result.Error.ErrorFormat();
@@ -83,10 +106,13 @@ public sealed class BotSession : IAsyncDisposable
     private void StartAudio()
     {
         _encoder?.Dispose();
+
+        // PCM in → volume → Opus encoder → server.
         _encoder = new EncoderPipe(Codec.OpusMusic)
         {
             OutStream = new VoiceSink(_client, Codec.OpusMusic),
         };
+        _volume = new VolumePipe { OutStream = _encoder, Volume = _requestedVolume };
     }
 
     /// <summary>Accepts raw 48 kHz stereo s16le PCM, exactly as ffmpeg produces it.</summary>
@@ -95,7 +121,19 @@ public sealed class BotSession : IAsyncDisposable
         // Silently ignoring audio for a bot that is not connected is deliberate: ffmpeg may
         // still be draining a buffer while the bot drops, and that is not an error worth
         // logging on every frame.
-        _encoder?.Write(pcm, null);
+        _volume?.Write(pcm, null);
+    }
+
+    private float _requestedVolume = 0.4f;
+
+    /// <summary>
+    /// Sets playback level. The domain speaks in percent, where 100 is unity gain and values
+    /// above it amplify — quiet sources genuinely need that headroom.
+    /// </summary>
+    public void SetVolume(int percent)
+    {
+        _requestedVolume = Math.Clamp(percent, 0, 150) / 100f;
+        if (_volume is not null) _volume.Volume = _requestedVolume;
     }
 
     /// <summary>
@@ -113,26 +151,35 @@ public sealed class BotSession : IAsyncDisposable
     }
 
     public Task<E<string>> SendChannelMessageAsync(string text) =>
-        DescribeAsync(_client.SendMessage(text, TextMessageTargetMode.Channel, 0));
+        DescribeAsync(() => _client.SendMessage(text, TextMessageTargetMode.Channel, 0));
 
     public Task<E<string>> SendPrivateMessageAsync(ushort clientId, string text) =>
-        DescribeAsync(_client.SendMessage(text, TextMessageTargetMode.Private, clientId));
+        DescribeAsync(() => _client.SendMessage(text, TextMessageTargetMode.Private, clientId));
 
     public Task<E<string>> MoveToChannelAsync(ulong channelId, string? password) =>
-        DescribeAsync(_client.ClientMove(_client.ClientId, (ChannelId)channelId, password));
+        DescribeAsync(() => _client.ClientMove(_client.ClientId, (ChannelId)channelId, password));
 
     public Task<E<string>> SetNicknameAsync(string nickname) =>
-        DescribeAsync(_client.ChangeName(nickname));
+        DescribeAsync(() => _client.ChangeName(nickname));
 
     /// <summary>
     /// Collapses TSLib's command result into a plain error string for the wire. Every command
     /// is asynchronous — TSLib's `CmdR` is an alias for Task&lt;E&lt;CommandError&gt;&gt;.
     /// </summary>
-    private static async Task<E<string>> DescribeAsync(Task<E<TSLib.Messages.CommandError>> pending)
+    private async Task<E<string>> DescribeAsync(Func<Task<E<TSLib.Messages.CommandError>>> command)
     {
-        var result = await pending;
+        // Marshalled onto the scheduler: sending a command ultimately reaches code that
+        // verifies the calling thread.
+        var result = await _scheduler.InvokeAsync(command);
         return result.Ok ? E<string>.OkR : result.Error.ErrorFormat();
     }
+
+    /// <summary>
+    /// Reads the connection book on its owning thread. The book is mutated as notifications
+    /// arrive, so reading it from a request thread would be a race even where TSLib does not
+    /// explicitly reject it.
+    /// </summary>
+    private Task<T> ReadAsync<T>(Func<T> read) => _scheduler.Invoke(read);
 
     // ─── reads ──────────────────────────────────────────────────────────────
     //
@@ -141,7 +188,7 @@ public sealed class BotSession : IAsyncDisposable
     // the ClientQuery transport, where every `clientlist` was a request over a socket that
     // could be in flight while a command was waiting.
 
-    public WhoAmIResult WhoAmI()
+    public Task<WhoAmIResult> WhoAmIAsync() => ReadAsync(() =>
     {
         var self = _client.Book.Self();
         return new WhoAmIResult(
@@ -149,24 +196,24 @@ public sealed class BotSession : IAsyncDisposable
             ChannelId: self?.Channel.Value ?? 0,
             Uid: Identity.ClientUid.Value,
             Nickname: self?.Name ?? string.Empty);
-    }
+    });
 
-    public ChannelRef? CurrentChannel()
+    public Task<ChannelRef?> CurrentChannelAsync() => ReadAsync(() =>
     {
         var channel = _client.Book.CurrentChannel();
         return channel is null ? null : new ChannelRef(channel.Id.Value, channel.Name);
-    }
+    });
 
-    public ChannelRef[] ListChannels() =>
+    public Task<ChannelRef[]> ListChannelsAsync() => ReadAsync(() =>
         _client.Book.Channels.Values
             .Select(channel => new ChannelRef(channel.Id.Value, channel.Name))
-            .ToArray();
+            .ToArray());
 
     /// <summary>
     /// Clients in the bot's own channel, with their server groups — the input the permission
     /// resolver needs to map a person to a role.
     /// </summary>
-    public ChannelClient[] ListChannelClients()
+    public Task<ChannelClient[]> ListChannelClientsAsync() => ReadAsync(() =>
     {
         var ownChannel = _client.Book.Self()?.Channel;
         if (ownChannel is null) return [];
@@ -179,7 +226,7 @@ public sealed class BotSession : IAsyncDisposable
                 Nickname: client.Name,
                 ServerGroupIds: client.ServerGroups.Select(group => group.Value).ToArray()))
             .ToArray();
-    }
+    });
 
     // ─── events out ─────────────────────────────────────────────────────────
 
@@ -224,7 +271,19 @@ public sealed class BotSession : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _encoder?.Dispose();
-        await _client.Disconnect();
+
+        // Disconnect also verifies the calling thread, so it goes through the scheduler like
+        // everything else. Tearing the scheduler down first would leave the connection open.
+        try
+        {
+            await _scheduler.InvokeAsync(() => _client.Disconnect());
+        }
+        catch (Exception error)
+        {
+            _logger.LogDebug(error, "bot {BotId}: disconnect failed during teardown", BotId);
+        }
+
         _client.Dispose();
+        _scheduler.Dispose();
     }
 }
