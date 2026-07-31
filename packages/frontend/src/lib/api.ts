@@ -121,6 +121,29 @@ export interface CreateInstanceBody {
   serverPassword: string | null;
 }
 
+export interface PlaylistSummary {
+  id: string;
+  instanceId: string;
+  name: string;
+  description: string | null;
+  ownerUid: string | null;
+  isDefault: boolean;
+  trackCount: number;
+  totalDurationSec: number;
+  updatedAt: string;
+}
+
+export interface PlaylistTrack {
+  id: string;
+  position: number;
+  track: Track;
+  addedAt: string;
+}
+
+export interface PlaylistDetail extends PlaylistSummary {
+  tracks: PlaylistTrack[];
+}
+
 export const api = {
   health: () => request<{ status: string; at: string }>('/api/health'),
 
@@ -152,6 +175,69 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  listPlaylists: (instanceId: string) =>
+    request<{ playlists: PlaylistSummary[] }>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists`,
+    ),
+
+  getPlaylist: (instanceId: string, playlistId: string) =>
+    request<PlaylistDetail>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}`,
+    ),
+
+  createPlaylist: (instanceId: string, name: string) =>
+    request<PlaylistSummary>(`/api/instances/${encodeURIComponent(instanceId)}/playlists`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  savePlaylistFromQueue: (instanceId: string, name: string) =>
+    request<PlaylistSummary>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/from-queue`,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    ),
+
+  renamePlaylist: (instanceId: string, playlistId: string, name: string) =>
+    request<PlaylistDetail>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}`,
+      { method: 'PATCH', body: JSON.stringify({ name }) },
+    ),
+
+  makePlaylistDefault: (instanceId: string, playlistId: string) =>
+    request<PlaylistDetail>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}`,
+      { method: 'PATCH', body: JSON.stringify({ isDefault: true }) },
+    ),
+
+  clearDefaultPlaylist: (instanceId: string) =>
+    request<void>(`/api/instances/${encodeURIComponent(instanceId)}/playlists/default`, {
+      method: 'DELETE',
+    }),
+
+  deletePlaylist: (instanceId: string, playlistId: string) =>
+    request<void>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}`,
+      { method: 'DELETE' },
+    ),
+
+  addToPlaylist: (instanceId: string, playlistId: string, url: string) =>
+    request<{ added: number; omitted: number; playlist: PlaylistDetail }>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}/tracks`,
+      { method: 'POST', body: JSON.stringify({ url }) },
+    ),
+
+  removeFromPlaylist: (instanceId: string, playlistId: string, trackId: string) =>
+    request<void>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}/tracks/${encodeURIComponent(trackId)}`,
+      { method: 'DELETE' },
+    ),
+
+  loadPlaylist: (instanceId: string, playlistId: string) =>
+    request<{ queued: number; rejected: number }>(
+      `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}/load`,
+      { method: 'POST', body: JSON.stringify({ requestedBy: 'the panel' }) },
+    ),
 
   deleteInstance: (instanceId: string) =>
     request<void>(`/api/instances/${encodeURIComponent(instanceId)}`, { method: 'DELETE' }),

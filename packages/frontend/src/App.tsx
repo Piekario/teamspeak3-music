@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LogOut, Music2, Plus, Settings } from 'lucide-react';
+import { ListMusic, LogOut, Music2, Plus, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { AddInstanceDialog, type NewInstance } from './components/AddInstanceDialog.tsx';
@@ -12,8 +12,15 @@ import { useLiveSocket } from './hooks/use-live-socket.ts';
 import { useTheme } from './hooks/use-theme.ts';
 import { ApiError, api, clearStoredToken, readStoredToken } from './lib/api.ts';
 import { DashboardPage } from './pages/DashboardPage.tsx';
+import { PlaylistsPage } from './pages/PlaylistsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TokenGate } from './pages/TokenGate.tsx';
+
+const TAB_ICONS = {
+  player: <Music2 className="size-3.5" />,
+  playlists: <ListMusic className="size-3.5" />,
+  settings: <Settings className="size-3.5" />,
+} as const;
 import { useLiveStore } from './store/live-store.ts';
 
 export function App() {
@@ -44,7 +51,7 @@ function Shell({ theme, onSignOut }: ShellProps) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState<'player' | 'settings'>('player');
+  const [tab, setTab] = useState<'player' | 'playlists' | 'settings'>('player');
   const [addError, setAddError] = useState<string | null>(null);
 
   const instances = useQuery({
@@ -189,7 +196,7 @@ function Shell({ theme, onSignOut }: ShellProps) {
                 </div>
 
                 <div className="flex shrink-0 rounded-md border bg-muted/50 p-0.5">
-                  {(['player', 'settings'] as const).map((value) => (
+                  {(['player', 'playlists', 'settings'] as const).map((value) => (
                     <button
                       key={value}
                       type="button"
@@ -202,20 +209,16 @@ function Shell({ theme, onSignOut }: ShellProps) {
                           : 'text-muted-foreground hover:text-foreground',
                       )}
                     >
-                      {value === 'player' ? (
-                        <Music2 className="size-3.5" />
-                      ) : (
-                        <Settings className="size-3.5" />
-                      )}
+                      {TAB_ICONS[value]}
                       {value}
                     </button>
                   ))}
                 </div>
               </header>
 
-              {tab === 'player' ? (
-                <DashboardPage instanceId={selectedId} />
-              ) : (
+              {tab === 'player' && <DashboardPage instanceId={selectedId} />}
+              {tab === 'playlists' && <PlaylistsPage instanceId={selectedId} />}
+              {tab === 'settings' && (
                 <SettingsPage
                   instanceId={selectedId}
                   onDeleted={() => {
