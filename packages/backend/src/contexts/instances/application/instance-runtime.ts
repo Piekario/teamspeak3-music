@@ -272,7 +272,58 @@ export class InstanceRuntime {
       previous.clientQuery.apiKey !== config.clientQuery.apiKey ||
       previous.enabled !== config.enabled;
 
+    // Storing the new configuration is not the same as applying it. Settings read through a
+    // getter — limits, prefix, permissions — take effect on their next use, but anything the
+    // TeamSpeak client already holds has to be pushed, or saving a nickname would change the
+    // record and leave the bot on the server under its old name until the next reconnect.
+    if (!requiresRestart) void this.#applyLiveChanges(previous, config);
+
     return { requiresRestart };
+  }
+
+  async #applyLiveChanges(previous: InstanceConfig, config: InstanceConfig): Promise<void> {
+    if (this.#connectionState !== 'connected') return;
+
+    if (previous.teamspeak.nickname !== config.teamspeak.nickname) {
+      await this.#bot.setNickname(config.teamspeak.nickname).catch((error: unknown) => {
+        this.#deps.logger.warn('could not apply the new nickname', {
+          instance: config.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    if (previous.teamspeak.channel !== config.teamspeak.channel && config.teamspeak.channel !== null) {
+      await this.#moveToNamedChannel(config.teamspeak.channel).catch((error: unknown) => {
+        this.#deps.logger.warn('could not move to the new channel', {
+          instance: config.id,
+          channel: config.teamspeak.channel,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
+
+    await this.#publishStatus();
+  }
+
+  /**
+   * Moves to a channel by name.
+   *
+   * The configuration names channels rather than numbering them, because ids change when a
+   * channel is recreated — so the id has to be looked up at the moment of the move.
+   */
+  async #moveToNamedChannel(name: string): Promise<void> {
+    const channels = await this.#bot.listChannels();
+    const target = channels.find(
+      (channel) => channel.name.toLowerCase() === name.toLowerCase(),
+    );
+
+    if (target === undefined) {
+      this.#deps.logger.warn('no channel by that name', { instance: this.#config.id, name });
+      return;
+    }
+
+    await this.#bot.moveToChannel(target.id, this.#config.teamspeak.channelPassword ?? undefined);
   }
 
   async #onConnectionReady(): Promise<void> {
