@@ -123,15 +123,19 @@ export class PcmStreamAudioOutput implements AudioOutput {
       args.push('-ss', options.startAtSec.toFixed(3));
     }
 
-    args.push('-i', options.streamUrl);
+    // Unlike the PulseAudio path there is no sound server providing a clock, so playback is
+    // paced here. Without this ffmpeg would decode the whole track as fast as it can read it
+    // and the gateway would receive minutes of audio in seconds.
+    //
+    // Before `-i`, where it belongs: `-re` is an input option, and ffmpeg 7 rejects it after
+    // the input with "Error opening output files: Invalid argument" — which names the output
+    // and says nothing about the option that is actually wrong.
+    args.push('-re', '-i', options.streamUrl);
 
     // 48 kHz stereo s16le: what Opus wants and what the gateway's encoder expects.
     args.push('-vn', '-af', 'aresample=async=1:first_pts=0', '-ac', '2', '-ar', '48000');
 
-    // Unlike the PulseAudio path there is no sound server providing a clock, so playback is
-    // paced here. Without `-re` ffmpeg would decode the whole track as fast as it can read
-    // it and the gateway would receive minutes of audio in seconds.
-    args.push('-re', '-f', 's16le', 'pipe:1');
+    args.push('-f', 's16le', 'pipe:1');
 
     return args;
   }
