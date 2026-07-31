@@ -1,4 +1,4 @@
-import { instanceIdParamSchema } from '@tsmusic/shared';
+import { ROLES, instanceIdParamSchema } from '@tsmusic/shared';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -29,9 +29,18 @@ const createInstanceSchema = z.object({
     host: z.string().min(1),
     port: z.number().int().min(1).max(65535).default(9987),
     nickname: z.string().min(1).max(30).default('MusicBot'),
+    channel: z.string().max(200).nullable().default(null),
+    channelPassword: z.string().max(200).nullable().default(null),
     homeChannelId: z.number().int().min(0).nullable().default(null),
   }),
   serverPassword: z.string().nullable().default(null),
+  /** Which TeamSpeak server groups may use the bot, and in what role. */
+  grants: z
+    .object({
+      serverGroups: z.record(z.string(), z.enum(ROLES)).default({}),
+      identities: z.record(z.string(), z.enum(ROLES)).default({}),
+    })
+    .optional(),
 });
 
 const updateInstanceSchema = createInstanceSchema.partial().omit({ id: true });
@@ -93,6 +102,14 @@ export function registerInstanceAdminRoutes(
         host: body.teamspeak?.host ?? current.teamspeak.host,
         port: body.teamspeak?.port ?? current.teamspeak.port,
         nickname: body.teamspeak?.nickname ?? current.teamspeak.nickname,
+        channel:
+          body.teamspeak?.channel === undefined
+            ? current.teamspeak.channel
+            : body.teamspeak.channel,
+        channelPassword:
+          body.teamspeak?.channelPassword === undefined
+            ? current.teamspeak.channelPassword
+            : body.teamspeak.channelPassword,
         homeChannelId:
           body.teamspeak?.homeChannelId === undefined
             ? current.teamspeak.homeChannelId
@@ -105,6 +122,15 @@ export function registerInstanceAdminRoutes(
       playback: current.playback,
       commands: current.commands,
       permissions: current.permissions,
+      // Absent means "leave the grants alone"; an empty object means "revoke everything",
+      // and conflating the two would silently strip access on any unrelated edit.
+      grants:
+        body.grants === undefined
+          ? {
+              identities: current.grants.identities,
+              serverGroups: Object.fromEntries(current.grants.serverGroups),
+            }
+          : body.grants,
     });
 
     if (!config.ok) throw httpError(422, describeConfigError(config.error), config.error);

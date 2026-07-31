@@ -102,7 +102,16 @@ export class InstanceManager {
       id: runtime.id,
       name: runtime.config.name,
       enabled: runtime.config.enabled,
-      teamspeak: runtime.config.teamspeak,
+      // Built field by field rather than passed through. The narrower type alone would not
+      // help: TypeScript permits assigning a wider object to it, so the channel password
+      // would still be serialised to every panel.
+      teamspeak: {
+        host: runtime.config.teamspeak.host,
+        port: runtime.config.teamspeak.port,
+        nickname: runtime.config.teamspeak.nickname,
+        channel: runtime.config.teamspeak.channel,
+        homeChannelId: runtime.config.teamspeak.homeChannelId,
+      },
       connection: runtime.connectionState,
       connectionError: null,
       currentChannel: null,

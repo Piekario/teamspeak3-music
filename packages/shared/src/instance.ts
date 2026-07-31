@@ -46,11 +46,26 @@ export interface TeamSpeakTarget {
   readonly homeChannelId: number | null;
 }
 
+/**
+ * The publishable half of a TeamSpeak target.
+ *
+ * Separate from {@link TeamSpeakTarget} on purpose: that one carries the channel password,
+ * and a summary sent to every panel must not be able to include it. Making it a distinct
+ * type means leaking a secret is a compile error rather than an oversight.
+ */
+export interface PublicTeamSpeakTarget {
+  readonly host: string;
+  readonly port: number;
+  readonly nickname: string;
+  readonly channel: string | null;
+  readonly homeChannelId: number | null;
+}
+
 export interface InstanceSummary {
   readonly id: string;
   readonly name: string;
   readonly enabled: boolean;
-  readonly teamspeak: TeamSpeakTarget;
+  readonly teamspeak: PublicTeamSpeakTarget;
   readonly connection: ConnectionState;
   readonly connectionError: string | null;
   readonly currentChannel: ChannelRef | null;

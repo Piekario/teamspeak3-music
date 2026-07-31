@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LogOut, Music2, Plus } from 'lucide-react';
+import { LogOut, Music2, Plus, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { AddInstanceDialog, type NewInstance } from './components/AddInstanceDialog.tsx';
@@ -12,6 +12,7 @@ import { useLiveSocket } from './hooks/use-live-socket.ts';
 import { useTheme } from './hooks/use-theme.ts';
 import { ApiError, api, clearStoredToken, readStoredToken } from './lib/api.ts';
 import { DashboardPage } from './pages/DashboardPage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TokenGate } from './pages/TokenGate.tsx';
 import { useLiveStore } from './store/live-store.ts';
 
@@ -43,6 +44,7 @@ function Shell({ theme, onSignOut }: ShellProps) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [tab, setTab] = useState<'player' | 'settings'>('player');
   const [addError, setAddError] = useState<string | null>(null);
 
   const instances = useQuery({
@@ -174,13 +176,54 @@ function Shell({ theme, onSignOut }: ShellProps) {
 
           {selectedId !== null && selected !== undefined && (
             <>
-              <header className="mb-5">
-                <h1 className="text-xl font-semibold tracking-tight">{selected.name}</h1>
-                <p className="text-sm text-muted-foreground">
-                  {selected.teamspeak.host}:{selected.teamspeak.port} · {selected.teamspeak.nickname}
-                </p>
+              <header className="mb-5 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="truncate text-xl font-semibold tracking-tight">
+                    {selected.name}
+                  </h1>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {selected.teamspeak.host}:{selected.teamspeak.port} ·{' '}
+                    {selected.teamspeak.nickname}
+                    {selected.teamspeak.channel !== null && ` · ${selected.teamspeak.channel}`}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 rounded-md border bg-muted/50 p-0.5">
+                  {(['player', 'settings'] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setTab(value)}
+                      aria-current={tab === value ? 'page' : undefined}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm capitalize transition-colors',
+                        tab === value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {value === 'player' ? (
+                        <Music2 className="size-3.5" />
+                      ) : (
+                        <Settings className="size-3.5" />
+                      )}
+                      {value}
+                    </button>
+                  ))}
+                </div>
               </header>
-              <DashboardPage instanceId={selectedId} />
+
+              {tab === 'player' ? (
+                <DashboardPage instanceId={selectedId} />
+              ) : (
+                <SettingsPage
+                  instanceId={selectedId}
+                  onDeleted={() => {
+                    setSelectedId(null);
+                    setTab('player');
+                  }}
+                />
+              )}
             </>
           )}
         </div>

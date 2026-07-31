@@ -30,12 +30,29 @@ export function registerInstanceRoutes(app: FastifyInstance, instances: Instance
       name: config.name,
       enabled: config.enabled,
       connection: runtime.connectionState,
-      teamspeak: config.teamspeak,
+      // Spread field by field rather than wholesale: `teamspeak` carries the channel
+      // password, and returning the object as-is would publish it to anyone with the panel
+      // open. `hasChannelPassword` tells the UI whether one is set without revealing it.
+      teamspeak: {
+        host: config.teamspeak.host,
+        port: config.teamspeak.port,
+        nickname: config.teamspeak.nickname,
+        channel: config.teamspeak.channel,
+        homeChannelId: config.teamspeak.homeChannelId,
+      },
+      hasChannelPassword: config.teamspeak.channelPassword !== null,
+      hasServerPassword: config.serverPassword !== null,
       audio: config.audio,
       playback: config.playback,
       commands: config.commands,
       permissions: config.permissions,
+      grants: {
+        identities: config.grants.identities,
+        // A Map does not survive JSON; the keys were strings on the way in anyway.
+        serverGroups: Object.fromEntries(config.grants.serverGroups),
+      },
       // clientQuery is omitted on purpose: it carries the API key.
+      // The server and channel passwords are omitted for the same reason.
     };
   });
 

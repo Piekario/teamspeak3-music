@@ -1,4 +1,4 @@
-import type { InstanceSummary, PlayerState, RepeatMode, Track } from '@tsmusic/shared';
+import type { InstanceSummary, PlayerState, RepeatMode, Role, Track } from '@tsmusic/shared';
 
 /**
  * The REST client.
@@ -65,6 +65,46 @@ export interface TrackRequestBody {
   position?: number;
 }
 
+/**
+ * One instance in full, as the settings screen needs it.
+ *
+ * Passwords are absent by design — the backend never returns them. `hasChannelPassword` and
+ * `hasServerPassword` say whether one is set so the UI can show that without knowing it.
+ */
+export interface InstanceDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  connection: string;
+  teamspeak: {
+    host: string;
+    port: number;
+    nickname: string;
+    channel: string | null;
+    homeChannelId: number | null;
+  };
+  hasChannelPassword?: boolean;
+  hasServerPassword?: boolean;
+  playback: { defaultVolume: number; maxTrackSeconds: number; maxPerUser: number };
+  commands: { prefix: string; requireSameChannel: boolean };
+  permissions: { defaultRole: Role; whitelistOnly: boolean };
+  /** Optional: a backend one deploy behind the panel omits it. */
+  grants?: { identities: Record<string, Role>; serverGroups: Record<string, Role> };
+}
+
+export interface UpdateInstanceBody {
+  name?: string;
+  teamspeak?: {
+    host?: string;
+    port?: number;
+    nickname?: string;
+    channel?: string | null;
+    channelPassword?: string;
+  };
+  serverPassword?: string;
+  grants?: { serverGroups: Record<string, Role>; identities: Record<string, Role> };
+}
+
 export interface CreateInstanceBody {
   id: string;
   name: string;
@@ -76,6 +116,27 @@ export const api = {
   health: () => request<{ status: string; at: string }>('/api/health'),
 
   listInstances: () => request<{ instances: InstanceSummary[] }>('/api/instances'),
+
+  getInstance: (instanceId: string) =>
+    request<InstanceDetail>(`/api/instances/${encodeURIComponent(instanceId)}`),
+
+  updateInstance: (instanceId: string, body: UpdateInstanceBody) =>
+    request<void>(`/api/instances/${encodeURIComponent(instanceId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  startInstance: (instanceId: string) =>
+    request<void>(`/api/instances/${encodeURIComponent(instanceId)}/start`, { method: 'POST' }),
+
+  stopInstance: (instanceId: string) =>
+    request<void>(`/api/instances/${encodeURIComponent(instanceId)}/stop`, { method: 'POST' }),
+
+  importPlaylist: (instanceId: string, url: string, limit = 100) =>
+    request<{ title: string; queued: number; rejected: number; omitted: number }>(
+      `/api/instances/${encodeURIComponent(instanceId)}/queue/playlist`,
+      { method: 'POST', body: JSON.stringify({ url, limit }) },
+    ),
 
   createInstance: (body: CreateInstanceBody) =>
     request<{ id: string }>('/api/instances', {
