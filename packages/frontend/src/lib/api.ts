@@ -22,6 +22,7 @@ export class ApiError extends Error {
 }
 
 const TOKEN_STORAGE_KEY = 'tsmusic.token';
+const SELECTED_INSTANCE_KEY = 'tsmusic.instance';
 
 export function readStoredToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -33,6 +34,16 @@ export function storeToken(token: string): void {
 
 export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+/** Which bot the panel was last looking at, so a refresh lands where you left off. */
+export function readSelectedInstance(): string | null {
+  return localStorage.getItem(SELECTED_INSTANCE_KEY);
+}
+
+export function storeSelectedInstance(instanceId: string | null): void {
+  if (instanceId === null) localStorage.removeItem(SELECTED_INSTANCE_KEY);
+  else localStorage.setItem(SELECTED_INSTANCE_KEY, instanceId);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

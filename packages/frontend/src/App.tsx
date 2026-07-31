@@ -10,7 +10,14 @@ import { Card } from './components/ui/card.tsx';
 import { cn } from './lib/utils.ts';
 import { useLiveSocket } from './hooks/use-live-socket.ts';
 import { useTheme } from './hooks/use-theme.ts';
-import { ApiError, api, clearStoredToken, readStoredToken } from './lib/api.ts';
+import {
+  ApiError,
+  api,
+  clearStoredToken,
+  readSelectedInstance,
+  readStoredToken,
+  storeSelectedInstance,
+} from './lib/api.ts';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { PlaylistsPage } from './pages/PlaylistsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
@@ -49,7 +56,9 @@ function Shell({ theme, onSignOut }: ShellProps) {
   const resetLive = useLiveStore((state) => state.reset);
   const queryClient = useQueryClient();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Remembered across reloads: which bot you are looking at is a place in the app, and
+  // being dropped back on the first one after every refresh makes a two-bot panel tiring.
+  const [selectedId, setSelectedId] = useState<string | null>(() => readSelectedInstance());
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState<'player' | 'playlists' | 'settings'>('player');
   const [addError, setAddError] = useState<string | null>(null);
@@ -81,12 +90,20 @@ function Shell({ theme, onSignOut }: ShellProps) {
       setAddError(error instanceof ApiError ? error.message : 'Could not create the bot'),
   });
 
-  // Select the first bot once the list arrives, but never override a deliberate choice.
+  // Falls back to the first bot once the list arrives — including when the remembered one
+  // has since been deleted, which would otherwise leave the panel addressing a bot that is
+  // not there.
   useEffect(() => {
-    if (selectedId !== null) return;
-    const first = instances.data?.instances[0];
-    if (first !== undefined) setSelectedId(first.id);
+    const all = instances.data?.instances;
+    if (all === undefined) return;
+    if (selectedId !== null && all.some((instance) => instance.id === selectedId)) return;
+
+    setSelectedId(all[0]?.id ?? null);
   }, [instances.data, selectedId]);
+
+  useEffect(() => {
+    storeSelectedInstance(selectedId);
+  }, [selectedId]);
 
   const signOut = (): void => {
     clearStoredToken();
