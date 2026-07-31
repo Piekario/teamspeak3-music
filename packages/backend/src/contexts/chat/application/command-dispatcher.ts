@@ -67,8 +67,18 @@ export class CommandDispatcher {
       return;
     }
 
-    // The bot sees its own messages; answering them would loop.
-    if (message.senderUid.length === 0) return;
+    // No sender means the bot's own message, which it would otherwise answer in a loop.
+    //
+    // Logged rather than dropped in silence: a transport that fails to report the sender's
+    // unique id makes every command vanish here, and a bot that ignores its channel with
+    // nothing in the log is a miserable thing to diagnose.
+    if (message.senderUid.length === 0) {
+      this.#options.logger.debug('ignoring a message with no sender uid', {
+        instance: this.#options.instanceId,
+        text: message.text.slice(0, 40),
+      });
+      return;
+    }
 
     this.#options.onIdentitySeen(message.senderUid, message.senderNickname);
 

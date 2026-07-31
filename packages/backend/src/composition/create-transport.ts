@@ -55,7 +55,7 @@ export function buildTransport(
       pcmPort: appConfig.GATEWAY_PCM_PORT,
       proxy: appConfig.YTDLP_PROXY,
       onReady,
-      identity: deps.storedIdentity(config.id),
+      identity: () => deps.storedIdentity(config.id),
       onIdentityIssued: (key, offset, uid) =>
         deps.onIdentityIssued(config.id, key, offset, uid),
     });

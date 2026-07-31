@@ -23,11 +23,12 @@ export interface GatewayTransportOptions {
   readonly proxy?: string | undefined;
   readonly onReady: () => Promise<void>;
   /**
-   * Persisted TeamSpeak identity. A bot without one is a stranger on every restart, losing
-   * whatever server groups an admin granted it, so the caller is expected to store what the
-   * gateway hands back the first time.
+   * Persisted TeamSpeak identity, read at the moment the bot is created rather than when
+   * the transport is built. A bot without one is a stranger on every restart, losing whatever
+   * server groups an admin granted it — and reading it once would mean a retry after a failed
+   * create still presented no identity, so the gateway would mint a fresh one every attempt.
    */
-  readonly identity: { readonly key: string | null; readonly offset: number };
+  readonly identity: () => { readonly key: string | null; readonly offset: number };
   readonly onIdentityIssued: (key: string, offset: number, uid: string) => void;
 }
 
@@ -96,7 +97,8 @@ export class GatewayTransport implements InstanceTransport {
    * gateway restart — the bots live in that process, so when it goes they go with it.
    */
   async #createBot(): Promise<void> {
-    const { config, identity } = this.#options;
+    const { config } = this.#options;
+    const identity = this.#options.identity();
     this.#onConnectionChange?.('connecting', null);
 
     const created = await this.#options.connection.send<{

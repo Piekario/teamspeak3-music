@@ -253,7 +253,7 @@ public sealed class BotSession : IAsyncDisposable
                 Target: message.Target == TextMessageTargetMode.Private ? "private" : "channel",
                 Text: message.Message ?? string.Empty,
                 SenderClientId: message.InvokerId.Value,
-                SenderUid: message.InvokerUid?.Value ?? string.Empty,
+                SenderUid: UidOf(message.InvokerId, message.InvokerUid),
                 SenderNickname: message.InvokerName ?? string.Empty)));
         }
     }
@@ -266,9 +266,29 @@ public sealed class BotSession : IAsyncDisposable
                 Target: "poke",
                 Text: poke.Message ?? string.Empty,
                 SenderClientId: poke.InvokerId.Value,
-                SenderUid: poke.InvokerUid?.Value ?? string.Empty,
+                SenderUid: UidOf(poke.InvokerId, poke.InvokerUid),
                 SenderNickname: poke.InvokerName ?? string.Empty)));
         }
+    }
+
+    /// <summary>
+    /// The sender's unique id, from the event if the server bothered to include it and from
+    /// the connection's own book of clients otherwise.
+    ///
+    /// The fallback is not a nicety. A chat event often carries only the sender's client id,
+    /// which is a per-session number, while every permission decision is made against the
+    /// unique id — so a message without one is a message from nobody, and the bot drops it
+    /// rather than acting on an identity it cannot establish. That looks exactly like a bot
+    /// ignoring the channel.
+    /// </summary>
+    private string UidOf(ClientId clientId, Uid? fromEvent)
+    {
+        var uid = fromEvent?.Value;
+        if (!string.IsNullOrEmpty(uid)) return uid;
+
+        return _client.Book.Clients.TryGetValue(clientId, out var known)
+            ? known.Uid?.Value ?? string.Empty
+            : string.Empty;
     }
 
     private void OnDisconnected(object? sender, DisconnectEventArgs args)

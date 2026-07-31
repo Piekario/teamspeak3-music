@@ -55,6 +55,19 @@ app.Map("/control", async context =>
         }
     }
 
+    async Task SendAsync(object payload)
+    {
+        await sendLock.WaitAsync();
+        try
+        {
+            if (socket.State != WebSocketState.Open) return;
+            await socket.SendAsync(
+                JsonSerializer.SerializeToUtf8Bytes(payload, jsonOptions),
+                WebSocketMessageType.Text, true, CancellationToken.None);
+        }
+        finally { sendLock.Release(); }
+    }
+
     var buffer = new byte[32 * 1024];
     while (socket.State == WebSocketState.Open)
     {
@@ -62,27 +75,37 @@ app.Map("/control", async context =>
         if (received.MessageType == WebSocketMessageType.Close) break;
 
         var raw = Encoding.UTF8.GetString(buffer, 0, received.Count);
-        Response response;
-        try
-        {
-            var request = JsonSerializer.Deserialize<Request>(raw, jsonOptions)
-                          ?? throw new InvalidOperationException("empty request");
-            response = await HandleAsync(request, registry, Publish, jsonOptions);
-        }
-        catch (Exception error)
-        {
-            logger.LogWarning(error, "control request failed");
-            response = new Response("unknown", false, Error: error.Message);
-        }
 
-        await sendLock.WaitAsync();
-        try
+        // Handled off the read loop, deliberately. Connecting a bot to a TeamSpeak server
+        // takes seconds, and awaiting it here made every other bot's request queue behind it:
+        // with two bots the second one's create waited out the first one's connect, timed
+        // out, retried, and the backlog only ever grew. Responses carry the request id, so
+        // they need no ordering — only the socket writes do, and the lock already serialises
+        // those.
+        _ = Task.Run(async () =>
         {
-            await socket.SendAsync(
-                JsonSerializer.SerializeToUtf8Bytes(response, jsonOptions),
-                WebSocketMessageType.Text, true, CancellationToken.None);
-        }
-        finally { sendLock.Release(); }
+            Response response;
+            try
+            {
+                var request = JsonSerializer.Deserialize<Request>(raw, jsonOptions)
+                              ?? throw new InvalidOperationException("empty request");
+                response = await HandleAsync(request, registry, Publish, jsonOptions);
+            }
+            catch (Exception error)
+            {
+                logger.LogWarning(error, "control request failed");
+                response = new Response("unknown", false, Error: error.Message);
+            }
+
+            try
+            {
+                await SendAsync(response);
+            }
+            catch (Exception error)
+            {
+                logger.LogDebug(error, "dropping a response for a closed control socket");
+            }
+        });
     }
 });
 
