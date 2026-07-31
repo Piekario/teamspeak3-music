@@ -164,6 +164,22 @@ static async Task<Response> HandleAsync(
             return Reply(request.Id, renamed);
         }
 
+        // Reads are answered from TSLib's local book, so they cost nothing on the wire.
+        case "bot.whoami":
+            return new Response(request.Id, true, Session().WhoAmI());
+
+        case "bot.currentChannel":
+            return new Response(request.Id, true, Session().CurrentChannel());
+
+        case "bot.listChannels":
+            return new Response(request.Id, true, Session().ListChannels());
+
+        case "bot.listChannelClients":
+            return new Response(request.Id, true, Session().ListChannelClients());
+
+        case "bot.status":
+            return new Response(request.Id, true, new StatusEvent(Session().Connection, null));
+
         default:
             return new Response(request.Id, false, Error: $"unknown command '{request.Command}'");
     }

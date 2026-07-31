@@ -134,6 +134,53 @@ public sealed class BotSession : IAsyncDisposable
         return result.Ok ? E<string>.OkR : result.Error.ErrorFormat();
     }
 
+    // ─── reads ──────────────────────────────────────────────────────────────
+    //
+    // These come from TSLib's book — a live mirror of the server the client maintains from
+    // the notifications it receives. No round-trip is needed, which is a real improvement on
+    // the ClientQuery transport, where every `clientlist` was a request over a socket that
+    // could be in flight while a command was waiting.
+
+    public WhoAmIResult WhoAmI()
+    {
+        var self = _client.Book.Self();
+        return new WhoAmIResult(
+            ClientId: _client.ClientId.Value,
+            ChannelId: self?.Channel.Value ?? 0,
+            Uid: Identity.ClientUid.Value,
+            Nickname: self?.Name ?? string.Empty);
+    }
+
+    public ChannelRef? CurrentChannel()
+    {
+        var channel = _client.Book.CurrentChannel();
+        return channel is null ? null : new ChannelRef(channel.Id.Value, channel.Name);
+    }
+
+    public ChannelRef[] ListChannels() =>
+        _client.Book.Channels.Values
+            .Select(channel => new ChannelRef(channel.Id.Value, channel.Name))
+            .ToArray();
+
+    /// <summary>
+    /// Clients in the bot's own channel, with their server groups — the input the permission
+    /// resolver needs to map a person to a role.
+    /// </summary>
+    public ChannelClient[] ListChannelClients()
+    {
+        var ownChannel = _client.Book.Self()?.Channel;
+        if (ownChannel is null) return [];
+
+        return _client.Book.Clients.Values
+            .Where(client => client.Channel == ownChannel)
+            .Select(client => new ChannelClient(
+                Clid: client.Id.Value,
+                Uid: client.Uid?.Value ?? string.Empty,
+                Nickname: client.Name,
+                ServerGroupIds: client.ServerGroups.Select(group => group.Value).ToArray()))
+            .ToArray();
+    }
+
     // ─── events out ─────────────────────────────────────────────────────────
 
     private void OnTextMessage(object? sender, IEnumerable<TSLib.Messages.TextMessage> messages)
