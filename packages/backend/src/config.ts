@@ -40,6 +40,19 @@ const environmentSchema = z.object({
   FFMPEG_BINARY: z.string().default('ffmpeg'),
   PACTL_BINARY: z.string().default('pactl'),
 
+  /**
+   * Which TeamSpeak transport to use.
+   *
+   * `clientquery` drives a headless GUI client per bot — one emulated container each, but
+   * the path with the most hours on it. `gateway` speaks the protocol directly through
+   * TSLib: every bot in one process, no emulation, no virtual sound card, identities
+   * generated in code.
+   */
+  TS3_TRANSPORT: z.enum(['clientquery', 'gateway']).default('clientquery'),
+  GATEWAY_URL: z.string().default('ws://ts3-gateway:8080/control'),
+  GATEWAY_PCM_HOST: z.string().default('ts3-gateway'),
+  GATEWAY_PCM_PORT: z.coerce.number().int().min(1).max(65535).default(8477),
+
   /** Shown in chat when a queue listing is too long to print. */
   WEB_URL: z.string().url().optional(),
 });

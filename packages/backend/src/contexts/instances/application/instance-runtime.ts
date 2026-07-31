@@ -16,14 +16,12 @@ import { PendingSearches } from '../../chat/application/pending-searches.ts';
 import { CommandRegistry } from '../../chat/domain/command-definition.ts';
 import { PlaybackService } from '../../playback/application/playback-service.ts';
 import { PlaybackSession } from '../../playback/domain/playback-session.ts';
-import type { TrackResolver } from '../../playback/domain/ports.ts';
+import type { TrackResolver, VolumeController } from '../../playback/domain/ports.ts';
 import { Queue } from '../../playback/domain/queue.ts';
 import { Volume } from '../../playback/domain/values.ts';
-import { FfmpegAudioOutput } from '../../playback/infrastructure/ffmpeg-audio-output.ts';
-import { PactlVolumeController } from '../../playback/infrastructure/pactl-volume-controller.ts';
+import type { BotClient } from '../domain/bot-client.ts';
 import type { InstanceConfig } from '../domain/instance.ts';
-import { ClientQueryBotClient } from '../infrastructure/clientquery/clientquery-bot-client.ts';
-import { ClientQueryConnection } from '../infrastructure/clientquery/connection.ts';
+import type { InstanceTransport } from '../domain/instance-transport.ts';
 
 export interface InstanceRuntimeDependencies {
   readonly config: InstanceConfig;
@@ -33,6 +31,19 @@ export interface InstanceRuntimeDependencies {
   readonly binaries: { readonly ffmpeg: string; readonly pactl: string };
   /** Must match the resolver's proxy: media URLs are bound to the requesting IP. */
   readonly proxy?: string | undefined;
+  /**
+   * Builds the TeamSpeak transport for this instance, together with the volume control that
+   * belongs to it. Which one is in use — a headless client over ClientQuery or a bot inside
+   * the TSLib gateway — is a configuration choice the runtime never sees.
+   *
+   * Volume comes back from the same call rather than separately because the two are not
+   * independent: PulseAudio sets a level on a sink, the gateway scales samples ahead of its
+   * encoder, and pairing the wrong one with a transport would silently do nothing.
+   */
+  readonly buildTransport: (
+    config: InstanceConfig,
+    onReady: () => Promise<void>,
+  ) => { readonly transport: InstanceTransport; readonly volume: VolumeController };
   readonly webUrl?: string | undefined;
   readonly logger: RuntimeLogger;
   readonly onIdentitySeen?: (instanceId: string, uid: string, nickname: string) => void;
@@ -55,8 +66,8 @@ export interface RuntimeLogger {
  */
 export class InstanceRuntime {
   readonly #deps: InstanceRuntimeDependencies;
-  readonly #connection: ClientQueryConnection;
-  readonly #bot: ClientQueryBotClient;
+  readonly #transport: InstanceTransport;
+  readonly #bot: BotClient;
   readonly #playback: PlaybackService;
   readonly #dispatcher: CommandDispatcher;
   readonly #queue: Queue;
@@ -81,18 +92,10 @@ export class InstanceRuntime {
     this.#deps = deps;
     this.#config = deps.config;
 
-    this.#connection = new ClientQueryConnection({
-      host: this.#config.clientQuery.host,
-      port: this.#config.clientQuery.port,
-      apiKey: this.#config.clientQuery.apiKey,
-      clock: deps.clock,
-      logger: deps.logger,
-      onReady: () => this.#onConnectionReady(),
-      onNotification: (notification) => this.#bot.handleNotification(notification),
-      onPhaseChange: (phase, error) => this.#onPhaseChange(phase, error),
-    });
-
-    this.#bot = new ClientQueryBotClient(this.#connection);
+    const built = deps.buildTransport(this.#config, () => this.#onConnectionReady());
+    this.#transport = built.transport;
+    this.#bot = built.transport.bot;
+    this.#transport.onConnectionChange((state, error) => this.#setConnectionState(state, error));
 
     this.#queue = new Queue(this.#config.playback);
     const session = new PlaybackSession({
@@ -106,21 +109,8 @@ export class InstanceRuntime {
       session,
       queue: this.#queue,
       resolvers: deps.resolvers,
-      audio: new FfmpegAudioOutput({
-        binary: deps.binaries.ffmpeg,
-        pulseServer: this.#config.audio.pulseServer,
-        sinkName: this.#config.audio.sinkName,
-        // Namespaced per instance so `pactl list sink-inputs` can tell several bots apart
-        // on one host.
-        applicationName: `tsmusic-${this.#config.id}`,
-        proxy: deps.proxy,
-        logger: deps.logger,
-      }),
-      volume: new PactlVolumeController({
-        binary: deps.binaries.pactl,
-        pulseServer: this.#config.audio.pulseServer,
-        sinkName: this.#config.audio.sinkName,
-      }),
+      audio: built.transport.audio,
+      volume: built.volume,
       events: deps.events,
       clock: deps.clock,
       logger: deps.logger,
@@ -173,7 +163,7 @@ export class InstanceRuntime {
       logger: deps.logger,
     });
 
-    this.#bot.onMessage((message) => {
+    this.#transport.onMessage((message) => {
       void this.#dispatcher.handle(message).catch((error: unknown) => {
         deps.logger.error('dispatch failed', {
           instance: this.#config.id,
@@ -213,12 +203,12 @@ export class InstanceRuntime {
       this.#deps.logger.info('instance disabled, not connecting', { instance: this.#config.id });
       return;
     }
-    this.#connection.connect();
+    this.#transport.start();
   }
 
   async stop(): Promise<void> {
     await this.#playback.shutdown();
-    await this.#connection.close();
+    await this.#transport.stop();
     this.#setConnectionState('disconnected', null);
   }
 
@@ -242,8 +232,9 @@ export class InstanceRuntime {
   }
 
   async #onConnectionReady(): Promise<void> {
-    await this.#bot.registerNotifications();
-
+    // Notification registration, where it is needed at all, belongs to the transport: the
+    // ClientQuery one has to re-register after every reconnect, the gateway pushes events
+    // unprompted.
     if (this.#config.teamspeak.nickname.length > 0) {
       await this.#bot.setNickname(this.#config.teamspeak.nickname).catch(() => {
         // A nickname clash is not worth failing the connection over.
@@ -268,21 +259,6 @@ export class InstanceRuntime {
 
     this.#setConnectionState('connected', null);
     await this.#publishStatus();
-  }
-
-  #onPhaseChange(phase: string, error: Error | undefined): void {
-    switch (phase) {
-      case 'connecting':
-        this.#setConnectionState('connecting', null);
-        return;
-      case 'ready':
-        return; // `onReady` reports connected once the bootstrap has finished.
-      case 'closed':
-        this.#setConnectionState('disconnected', null);
-        return;
-      default:
-        this.#setConnectionState('error', error?.message ?? null);
-    }
   }
 
   #setConnectionState(state: ConnectionState, error: string | null): void {

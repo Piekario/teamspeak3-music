@@ -1,4 +1,6 @@
 import { InstanceManager } from './contexts/instances/application/instance-manager.ts';
+import { GatewayConnection } from './contexts/instances/infrastructure/gateway/gateway-connection.ts';
+import { buildTransport } from './composition/create-transport.ts';
 import { YtDlpResolver } from './contexts/playback/infrastructure/ytdlp-resolver.ts';
 import { describeInstanceFileError, loadInstanceConfigs } from './composition/load-instances.ts';
 import { loadConfig } from './config.ts';
@@ -53,6 +55,29 @@ async function main(): Promise<void> {
     }),
   ];
 
+  /**
+   * Identities issued by the gateway are held in memory for now — a deliberate stop short of
+   * persistence. A restart currently costs each bot its identity and therefore whatever
+   * server groups an admin granted it, which is precisely what the instances table is for
+   * once instance CRUD lands.
+   */
+  const identities = new Map<string, { key: string | null; offset: number }>();
+
+  // The gateway holds every bot in one process, so one connection serves them all. The
+  // ClientQuery transport instead opens a socket per instance, and needs none of this.
+  const gateway =
+    config.TS3_TRANSPORT === 'gateway'
+      ? new GatewayConnection({
+          url: config.GATEWAY_URL,
+          logger: scopedLogger(logger, { component: 'gateway' }),
+          // Bots live inside the gateway process: if it restarted they are gone, so every
+          // instance has to be recreated rather than merely reconnected.
+          onReady: async () => {
+            for (const runtime of instances.all) runtime.start();
+          },
+        })
+      : undefined;
+
   const instances = InstanceManager.withDependencies({
     clock: systemClock,
     events,
@@ -61,7 +86,25 @@ async function main(): Promise<void> {
     proxy: config.YTDLP_PROXY,
     webUrl: config.WEB_URL,
     logger: scopedLogger(logger, { component: 'instance' }),
+    buildTransport: (instanceConfig, onReady) =>
+      buildTransport(
+        {
+          appConfig: config,
+          clock: systemClock,
+          logger: scopedLogger(logger, { component: 'transport' }),
+          gateway,
+          storedIdentity: (instanceId) => identities.get(instanceId) ?? { key: null, offset: 0 },
+          onIdentityIssued: (instanceId, key, offset, uid) => {
+            identities.set(instanceId, { key, offset });
+            scoped.info('gateway issued a bot identity', { instance: instanceId, uid });
+          },
+        },
+        instanceConfig,
+        onReady,
+      ),
   });
+
+  gateway?.connect();
 
   for (const instanceConfig of instanceConfigs.value) {
     const added = instances.add(instanceConfig);
