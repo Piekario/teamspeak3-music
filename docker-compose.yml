@@ -28,6 +28,15 @@ services:
       YTDLP_POT_PROVIDER_URL: http://pot-provider:4416
       FFMPEG_BINARY: ffmpeg
       PACTL_BINARY: pactl
+      # Which way the bots reach TeamSpeak. `gateway` holds every bot in one process and
+      # needs no client container per instance, which is what makes a bot created in the
+      # panel work without a second manual step.
+      TS3_TRANSPORT: "${TS3_TRANSPORT:-gateway}"
+      GATEWAY_URL: "ws://tsmusic-gateway:8080/control"
+      GATEWAY_PCM_HOST: tsmusic-gateway
+      GATEWAY_PCM_PORT: "8477"
+    depends_on:
+      - gateway
     volumes:
       - bot-data:/data
       # yt-dlp lives in a volume so it can be updated without an image rebuild.
@@ -36,6 +45,21 @@ services:
       - ./instances.json:/config/instances.json:ro
     ports:
       - "8080:8080"
+    networks:
+      - tsmusic
+
+  # Every bot's TeamSpeak connection, in one .NET process built on TSLib. Control is JSON
+  # over a WebSocket; PCM audio arrives on a plain TCP socket, one connection per bot.
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway/Dockerfile
+    image: tsmusic/gateway:0.1.0
+    container_name: tsmusic-gateway
+    restart: unless-stopped
+    expose:
+      - "8080"
+      - "8477"
     networks:
       - tsmusic
 

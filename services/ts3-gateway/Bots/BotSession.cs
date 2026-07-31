@@ -71,14 +71,26 @@ public sealed class BotSession : IAsyncDisposable
             _logger.LogWarning("bot {BotId}: {Error}", BotId, error.ErrorFormat());
     }
 
+    /// <summary>The port a TeamSpeak server uses unless it says otherwise.</summary>
+    private const int DefaultVoicePort = 9987;
+
     public async Task<E<string>> ConnectAsync(CreateBotPayload payload)
     {
         SetConnection("connecting", null);
 
+        // The default port is left off the address rather than spelled out. TSLib resolves a
+        // hostname through SRV and TSDNS — which is how hosted servers publish the port they
+        // really run on — but an explicit port in the address overrides whatever that lookup
+        // returns. Sending ":9987" therefore silently talked to the wrong port on every
+        // server that is not on the default one, and the connect simply never completed.
+        var address = payload.Port == DefaultVoicePort
+            ? payload.Host
+            : $"{payload.Host}:{payload.Port}";
+
         // Everything on ConnectionDataFull is read-only, so it is built in one shot rather
         // than assembled field by field.
         var connectionData = new ConnectionDataFull(
-            address: $"{payload.Host}:{payload.Port}",
+            address: address,
             identity: Identity,
             versionSign: TsVersionSigned.VER_LIN_3_X_X,
             username: payload.Nickname,

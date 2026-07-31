@@ -193,7 +193,7 @@ export class ClientQueryBotClient implements BotClient {
   }): Promise<void> {
     await this.#connection.send('connect', {
       params: {
-        address: `${target.host}:${target.port}`,
+        address: formatAddress(target.host, target.port),
         nickname: target.nickname,
         password: target.serverPassword ?? undefined,
         channel: target.channel ?? undefined,
@@ -251,6 +251,19 @@ export class ClientQueryBotClient implements BotClient {
     };
     for (const listener of this.#listeners) listener(message);
   }
+}
+
+/**
+ * The port a TeamSpeak server uses unless it says otherwise.
+ *
+ * Left off the address entirely when it is in force, because the client resolves a bare
+ * hostname through SRV and TSDNS — which is how hosted servers publish the port they really
+ * run on — while an explicit port overrides that lookup and wins silently.
+ */
+const DEFAULT_VOICE_PORT = 9987;
+
+function formatAddress(host: string, port: number): string {
+  return port === DEFAULT_VOICE_PORT ? host : `${host}:${port}`;
 }
 
 function targetModeToTarget(rawTargetMode: string | undefined): MessageTarget {
