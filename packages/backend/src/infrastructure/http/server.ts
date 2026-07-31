@@ -12,6 +12,7 @@ import type { InstanceRepository } from '../../contexts/instances/domain/instanc
 import { registerInstanceAdminRoutes } from './routes/instance-admin-routes.ts';
 import { registerInstanceRoutes } from './routes/instance-routes.ts';
 import { registerPlayerRoutes } from './routes/player-routes.ts';
+import { registerPlaylistRoutes } from './routes/playlist-routes.ts';
 import { WebSocketHub, type WebSocketLike } from './websocket-hub.ts';
 
 export interface HttpServerOptions {
@@ -67,6 +68,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
   registerInstanceRoutes(app, options.instances);
   registerPlayerRoutes(app, options.instances);
+  registerPlaylistRoutes(app, options.instances);
   if (options.instanceRepository !== undefined) {
     registerInstanceAdminRoutes(app, {
       instances: options.instances,

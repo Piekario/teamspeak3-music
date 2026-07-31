@@ -9,6 +9,8 @@ export type InstanceStatusPayload = Extract<
 import type { Clock } from '../../../shared-kernel/clock.ts';
 import type { EventPublisher } from '../../../shared-kernel/event-bus.ts';
 import { PermissionResolver } from '../../access/domain/permission-resolver.ts';
+import { PlaylistService } from '../../catalog/application/playlist-service.ts';
+import type { PlaylistRepository } from '../../catalog/domain/repositories.ts';
 import { CommandDispatcher } from '../../chat/application/command-dispatcher.ts';
 import { CooldownTracker } from '../../chat/application/cooldown-tracker.ts';
 import { createMusicCommands } from '../../chat/application/music-commands.ts';
@@ -46,6 +48,11 @@ export interface InstanceRuntimeDependencies {
     config: InstanceConfig,
     onReady: () => Promise<void>,
   ) => { readonly transport: InstanceTransport; readonly volume: VolumeController };
+  /**
+   * Playlist storage. Optional: an instance can run without it, losing only the playlist
+   * commands and the default that refills an exhausted queue.
+   */
+  readonly playlists?: PlaylistRepository | undefined;
   readonly webUrl?: string | undefined;
   readonly logger: RuntimeLogger;
   readonly onIdentitySeen?: (instanceId: string, uid: string, nickname: string) => void;
@@ -75,6 +82,7 @@ export class InstanceRuntime {
   readonly #playback: PlaybackService;
   readonly #dispatcher: CommandDispatcher;
   readonly #queue: Queue;
+  readonly #playlists: PlaylistService | undefined;
 
   #config: InstanceConfig;
   #connectionState: ConnectionState = 'disconnected';
@@ -150,7 +158,21 @@ export class InstanceRuntime {
       events: deps.events,
       clock: deps.clock,
       logger: deps.logger,
+      // Lazy: the playlist service needs the playback service that is being built here.
+      onQueueExhausted: async () => {
+        await this.#refillFromDefaultPlaylist();
+      },
     });
+
+    this.#playlists =
+      deps.playlists === undefined
+        ? undefined
+        : new PlaylistService({
+            instanceId: this.#config.id,
+            repository: deps.playlists,
+            resolvers: deps.resolvers,
+            playback: this.#playback,
+          });
 
     const registry = new CommandRegistry();
     registry.registerAll(
@@ -164,6 +186,7 @@ export class InstanceRuntime {
           homeChannelId: this.#config.teamspeak.homeChannelId,
         }),
         webUrl: deps.webUrl,
+        playlists: () => this.#playlists,
         // Lazy: `!help` describes the registry it is being registered into, which does not
         // exist yet at this point.
         registry: () => registry,
@@ -233,6 +256,11 @@ export class InstanceRuntime {
   }
 
   /** Current status, for handing to a client that connects after the fact. */
+  /** The panel's playlist screen goes through here, so it edits the same instance's set. */
+  get playlists(): PlaylistService | undefined {
+    return this.#playlists;
+  }
+
   get status(): InstanceStatusPayload {
     return this.#lastStatus;
   }
@@ -325,6 +353,35 @@ export class InstanceRuntime {
     }
 
     await this.#bot.moveToChannel(target.id, this.#config.teamspeak.channelPassword ?? undefined);
+  }
+
+  /**
+   * Tops an exhausted queue up from the default playlist, and says so on the channel.
+   *
+   * Announced because the alternative is music appearing from nowhere: on a channel where
+   * everybody has been queueing tracks by hand, a bot that suddenly plays something nobody
+   * asked for looks broken rather than helpful.
+   */
+  async #refillFromDefaultPlaylist(): Promise<void> {
+    if (this.#playlists === undefined) return;
+
+    const loaded = await this.#playlists.loadDefault({
+      uid: 'bot',
+      nickname: this.#config.teamspeak.nickname,
+    });
+    if (loaded === undefined) return;
+
+    this.#deps.logger.info('refilled the queue from the default playlist', {
+      instance: this.#config.id,
+      playlist: loaded.playlist.name,
+      queued: loaded.queued,
+    });
+
+    await this.#bot
+      .sendChannelMessage(`Queue empty — playing the default playlist "${loaded.playlist.name}".`)
+      .catch(() => {
+        // Not worth failing a refill over: the music matters more than the announcement.
+      });
   }
 
   async #onConnectionReady(): Promise<void> {

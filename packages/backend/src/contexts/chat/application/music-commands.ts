@@ -1,7 +1,11 @@
-import type { Track } from '@tsmusic/shared';
+import { roleSatisfies, type Track } from '@tsmusic/shared';
 
 import type { Clock } from '../../../shared-kernel/clock.ts';
 import type { BotClient } from '../../instances/domain/bot-client.ts';
+import {
+  describePlaylistError,
+  type PlaylistService,
+} from '../../catalog/application/playlist-service.ts';
 import type { PlaybackService } from '../../playback/application/playback-service.ts';
 import { ClientUid, Volume } from '../../playback/domain/values.ts';
 import type { CommandName } from '@tsmusic/shared';
@@ -34,6 +38,11 @@ export interface MusicCommandDependencies {
   readonly registry: () => CommandRegistry;
   /** Same rule the dispatcher applies, so help never lists what it would then refuse. */
   readonly canUse: (invoker: CommandInvoker, command: CommandName) => boolean;
+  /**
+   * Playlist storage, absent when the instance runs without it. Read lazily for the same
+   * reason as the registry: it is built from the playback service these commands close over.
+   */
+  readonly playlists: () => PlaylistService | undefined;
 }
 
 const SEARCH_RESULT_COUNT = 5;
@@ -323,6 +332,16 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
     }),
 
     defineCommand({
+      name: 'playlist',
+      aliases: ['pl'],
+      defaultRole: 'user',
+      usage: '!playlist [list | show <name> | load <name> | save <name> | add <name> <url> | default <name> | delete <name>]',
+      summary: 'Saved playlists: play them, build them, pick the default',
+      cooldownMs: RESOLVING_COOLDOWN_MS,
+      handler: (context) => handlePlaylist(deps, context),
+    }),
+
+    defineCommand({
       name: 'help',
       aliases: ['?', 'commands'],
       defaultRole: 'user',
@@ -372,6 +391,146 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
     }),
   ];
 }
+
+/**
+ * Everything `!playlist` can do, dispatched on its first word.
+ *
+ * Sub-commands rather than a command each, because `!playlist load party` reads the way
+ * people already talk about playlists and keeps eight more names out of `!help`. The ones
+ * that change something are gated at DJ, while listing and loading stay open — the risk of
+ * somebody playing a saved playlist is nothing next to the risk of somebody deleting one.
+ */
+async function handlePlaylist(deps: MusicCommandDependencies, context: CommandContext) {
+  const playlists = deps.playlists();
+  if (playlists === undefined) return reply('Playlists are not available on this bot.');
+
+  const prefix = deps.settings().prefix;
+  const [action = 'list', ...rest] = context.command.arguments;
+  const name = rest.join(' ').trim();
+  const mayEdit = roleSatisfies(context.invoker.role, 'dj');
+
+  switch (action.toLowerCase()) {
+    case 'list': {
+      const all = await playlists.list();
+      if (all.length === 0) {
+        return reply(`No playlists yet. Make one with ${prefix}playlist save <name>.`);
+      }
+
+      const lines = all.map(
+        (playlist) =>
+          `${playlist.name} — ${playlist.trackCount} track${playlist.trackCount === 1 ? '' : 's'}` +
+          (playlist.isDefault ? ' (default)' : ''),
+      );
+      return reply(lines.join('\n'));
+    }
+
+    case 'show': {
+      if (name.length === 0) return reply(`Which one? ${prefix}playlist show <name>`);
+
+      const playlist = await playlists.find(name);
+      if (playlist === undefined) return reply(`There is no playlist called "${name}".`);
+      if (playlist.tracks.length === 0) return reply(`"${playlist.name}" is empty.`);
+
+      // Capped: a chat message is 1024 characters, and a 200-track playlist would be cut off
+      // mid-word by the server rather than by us.
+      const shown = playlist.tracks.slice(0, PLAYLIST_PREVIEW_COUNT);
+      const lines = shown.map((item, index) => `${index + 1}. ${formatTrack(item.track)}`);
+      const remaining = playlist.tracks.length - shown.length;
+
+      return reply(
+        `${playlist.name}:\n${lines.join('\n')}` +
+          (remaining > 0 ? `\n…and ${remaining} more.` : ''),
+      );
+    }
+
+    case 'load':
+    case 'play': {
+      if (name.length === 0) return reply(`Which one? ${prefix}playlist load <name>`);
+
+      const loaded = await playlists.load(name, {
+        uid: context.invoker.uid,
+        nickname: context.invoker.nickname,
+      });
+      if (!loaded.ok) return reply(describePlaylistError(loaded.error));
+
+      const { playlist, queued, rejected } = loaded.value;
+      return reply(
+        `Queued ${queued} track${queued === 1 ? '' : 's'} from "${playlist.name}"` +
+          (rejected > 0 ? ` (${rejected} refused).` : '.'),
+      );
+    }
+
+    case 'save': {
+      if (!mayEdit) return reply('You cannot change playlists.');
+      if (name.length === 0) return reply(`Save it as what? ${prefix}playlist save <name>`);
+
+      const saved = await playlists.saveCurrentQueue(name, context.invoker.uid);
+      if (!saved.ok) return reply(describePlaylistError(saved.error));
+
+      return reply(
+        `Saved the queue as "${saved.value.name}". Play it with ${prefix}playlist load ${saved.value.name}.`,
+      );
+    }
+
+    case 'add': {
+      if (!mayEdit) return reply('You cannot change playlists.');
+
+      // The URL is the last word, so playlist names may contain spaces.
+      const url = rest.at(-1) ?? '';
+      const target = rest.slice(0, -1).join(' ').trim();
+      if (target.length === 0 || !looksLikeUrl(url)) {
+        return reply(`${prefix}playlist add <name> <url>`);
+      }
+
+      const playlist = await playlists.find(target);
+      if (playlist === undefined) return reply(`There is no playlist called "${target}".`);
+
+      const added = await playlists.addFromUrl(playlist.id, url);
+      if (!added.ok) return reply(describePlaylistError(added.error));
+
+      const omitted =
+        added.value.omitted > 0 ? ` (${added.value.omitted} beyond the import limit)` : '';
+      return reply(
+        `Added ${added.value.added} track${added.value.added === 1 ? '' : 's'} to "${playlist.name}"${omitted}.`,
+      );
+    }
+
+    case 'default': {
+      if (!mayEdit) return reply('You cannot change playlists.');
+
+      // No name clears the default rather than erroring: "stop refilling" is a thing people
+      // want, and there is no other way to ask for it.
+      if (name.length === 0) {
+        await playlists.setDefault(null);
+        return reply('Cleared the default playlist; the queue will just run out now.');
+      }
+
+      const playlist = await playlists.find(name);
+      if (playlist === undefined) return reply(`There is no playlist called "${name}".`);
+
+      await playlists.setDefault(playlist.id);
+      return reply(`"${playlist.name}" now plays when the queue runs out.`);
+    }
+
+    case 'delete':
+    case 'remove': {
+      if (!mayEdit) return reply('You cannot change playlists.');
+      if (name.length === 0) return reply(`Delete which one? ${prefix}playlist delete <name>`);
+
+      const playlist = await playlists.find(name);
+      if (playlist === undefined) return reply(`There is no playlist called "${name}".`);
+
+      await playlists.delete(playlist.id);
+      return reply(`Deleted "${playlist.name}".`);
+    }
+
+    default:
+      return reply(`I do not know ${prefix}playlist ${action}. Try ${prefix}help playlist.`);
+  }
+}
+
+/** As many entries as fit comfortably in one chat message. */
+const PLAYLIST_PREVIEW_COUNT = 10;
 
 /** How many playlist entries one request may add, regardless of the playlist's length. */
 const PLAYLIST_IMPORT_LIMIT = 100;

@@ -1,6 +1,7 @@
 import { InstanceManager } from './contexts/instances/application/instance-manager.ts';
 import { openDatabase } from './infrastructure/persistence/database.ts';
 import { DrizzleInstanceRepository } from './infrastructure/persistence/drizzle-instance-repository.ts';
+import { DrizzlePlaylistRepository } from './infrastructure/persistence/drizzle-playlist-repository.ts';
 import { GatewayConnection } from './contexts/instances/infrastructure/gateway/gateway-connection.ts';
 import { buildTransport } from './composition/create-transport.ts';
 import { YtDlpResolver } from './contexts/playback/infrastructure/ytdlp-resolver.ts';
@@ -70,6 +71,7 @@ async function main(): Promise<void> {
     db,
     scopedLogger(logger, { component: 'db' }),
   );
+  const playlistRepository = new DrizzlePlaylistRepository(db);
 
   /**
    * Identities are cached in memory and written through to storage.
@@ -106,6 +108,7 @@ async function main(): Promise<void> {
     binaries: { ffmpeg: config.FFMPEG_BINARY, pactl: config.PACTL_BINARY },
     proxy: config.YTDLP_PROXY,
     webUrl: config.WEB_URL,
+    playlists: playlistRepository,
     logger: scopedLogger(logger, { component: 'instance' }),
     buildTransport: (instanceConfig, onReady) =>
       buildTransport(

@@ -113,6 +113,44 @@ export class PlaybackService {
     return this.#options.session;
   }
 
+  get queueItems(): readonly QueueItem[] {
+    return this.#options.queue.items;
+  }
+
+  /**
+   * Queues a batch of already-resolved tracks and starts playing if nothing is.
+   *
+   * Partial success is the normal outcome — a per-user cap or a length limit will each stop
+   * some entries — so this reports what happened rather than failing the batch, letting a
+   * caller say "queued 40 of 52" instead of leaving somebody to count. The refused tracks
+   * come back rather than only their number, so a caller can name one.
+   */
+  async enqueueTracks(
+    tracks: readonly Track[],
+    requester: Requester,
+  ): Promise<{ readonly queued: number; readonly rejected: readonly Track[] }> {
+    let queued = 0;
+    const rejected: Track[] = [];
+
+    for (const track of tracks) {
+      const enqueued = this.#options.queue.enqueue(track, requester, this.#options.clock.now());
+      if (enqueued.ok) queued += 1;
+      else rejected.push(track);
+    }
+
+    if (queued > 0) {
+      // A batch arriving is a fresh intent to play, which cancels an earlier `stop` and
+      // re-arms the refill that a previously exhausted queue disarmed.
+      this.#stoppedDeliberately = false;
+      this.#refillArmed = true;
+      this.#publishQueue();
+      if (!this.#options.session.isActive) await this.#advance();
+      else this.#publishState();
+    }
+
+    return { queued, rejected };
+  }
+
   // ─── requests ─────────────────────────────────────────────────────────────
 
   /**
@@ -171,29 +209,14 @@ export class PlaybackService {
     const listing = await resolver.resolvePlaylist(url, limit);
     if (!listing.ok) return listing;
 
-    const rejected: string[] = [];
-    let queued = 0;
-
-    for (const track of listing.value.tracks) {
-      const enqueued = this.#options.queue.enqueue(track, requester, this.#options.clock.now());
-      if (enqueued.ok) queued += 1;
-      else rejected.push(track.title);
-    }
-
-    if (queued > 0) {
-      this.#stoppedDeliberately = false;
-      this.#refillArmed = true;
-      this.#publishQueue();
-      if (!this.#options.session.isActive) await this.#advance();
-      else this.#publishState();
-    }
+    const { queued, rejected } = await this.enqueueTracks(listing.value.tracks, requester);
 
     return ok({
       title: listing.value.title,
       queued,
       rejected: rejected.length,
       omitted: listing.value.omitted,
-      firstRejection: rejected[0] ?? null,
+      firstRejection: rejected[0]?.title ?? null,
     });
   }
 
