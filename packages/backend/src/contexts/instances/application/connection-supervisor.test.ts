@@ -8,6 +8,7 @@ const silentLogger = { info: () => {}, warn: () => {} };
 
 function build(options: { minDelayMs?: number; maxDelayMs?: number } = {}) {
   let reconnects = 0;
+  let enabled = true;
   const supervisor = new ConnectionSupervisor({
     instanceId: 'party',
     clock: new FakeClock(0),
@@ -15,11 +16,18 @@ function build(options: { minDelayMs?: number; maxDelayMs?: number } = {}) {
     reconnect: () => {
       reconnects += 1;
     },
+    isEnabled: () => enabled,
     minDelayMs: options.minDelayMs ?? 10,
     maxDelayMs: options.maxDelayMs ?? 80,
   });
 
-  return { supervisor, attempts: () => reconnects };
+  return {
+    supervisor,
+    attempts: () => reconnects,
+    setEnabled: (next: boolean) => {
+      enabled = next;
+    },
+  };
 }
 
 /** The supervisor schedules with real timers, so tests wait rather than fake the clock. */
@@ -34,6 +42,32 @@ describe('ConnectionSupervisor', () => {
     await after(30);
 
     assert.ok(attempts() >= 1, 'a dropped bot must be brought back');
+  });
+
+  it('does not retry while auto-reconnect is switched off', async () => {
+    const { supervisor, attempts, setEnabled } = build();
+    supervisor.start();
+    setEnabled(false);
+
+    supervisor.observe('disconnected');
+    await after(40);
+
+    assert.equal(attempts(), 0);
+  });
+
+  it('abandons a retry loop the moment the setting is switched off', async () => {
+    // Switching it off during an outage means "stop trying now", not "stop trying next time".
+    const { supervisor, attempts, setEnabled } = build();
+    supervisor.start();
+    supervisor.observe('disconnected');
+    await after(30);
+
+    const before = attempts();
+    setEnabled(false);
+    supervisor.observe('disconnected');
+    await after(60);
+
+    assert.equal(attempts(), before);
   });
 
   it('does nothing until started', async () => {

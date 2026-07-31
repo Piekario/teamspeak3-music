@@ -45,6 +45,8 @@ export function registerInstanceRoutes(app: FastifyInstance, instances: Instance
       audio: config.audio,
       playback: config.playback,
       commands: config.commands,
+      // Named apart from `connection` above, which is the live state rather than a setting.
+      connectionSettings: config.connection,
       permissions: config.permissions,
       grants: {
         identities: config.grants.identities,

@@ -108,6 +108,7 @@ export class InstanceRuntime {
       clock: deps.clock,
       logger: deps.logger,
       reconnect: () => this.#transport.start(),
+      isEnabled: () => this.#config.connection.autoReconnect,
     });
 
     this.#transport.onConnectionChange((state, error) => {

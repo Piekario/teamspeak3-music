@@ -44,6 +44,34 @@ function Field({
   );
 }
 
+/** A checkbox with the label and explanation beside it, the shape every toggle here takes. */
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3">
+      <input
+        type="checkbox"
+        className="mt-0.5 size-4 accent-primary"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>
+        <span className="text-sm font-medium leading-none">{label}</span>
+        <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
 /**
  * Everything about one bot that is worth changing after it exists.
  *
@@ -101,6 +129,7 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
         },
         ...(serverPassword === '' ? {} : { serverPassword }),
         playback: { pauseWhenAlone: form.playback?.pauseWhenAlone ?? false },
+        connectionSettings: { autoReconnect: form.connectionSettings?.autoReconnect ?? true },
         // Identities are passed through untouched: this screen edits group grants, and
         // sending an empty object would revoke every individual grant as a side effect.
         grants: { serverGroups: groups, identities: form.grants?.identities ?? {} },
@@ -307,29 +336,33 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
           <CardTitle>Playback</CardTitle>
         </CardHeader>
         <CardContent>
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4 accent-primary"
-              checked={form.playback?.pauseWhenAlone ?? false}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  playback: { ...form.playback, pauseWhenAlone: event.target.checked },
-                })
-              }
-            />
-            <span>
-              <span className="text-sm font-medium leading-none">
-                Pause when nobody is listening
-              </span>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                Pauses while the bot is alone in its channel and resumes when somebody
-                returns. A pause you made yourself is never overridden. Leave off for a bot
-                that is meant to keep broadcasting to an empty room.
-              </span>
-            </span>
-          </label>
+          <Toggle
+            label="Pause when nobody is listening"
+            hint="Pauses while the bot is alone in its channel and resumes when somebody returns. A pause you made yourself is never overridden. Leave off for a bot that is meant to keep broadcasting to an empty room."
+            checked={form.playback?.pauseWhenAlone ?? false}
+            onChange={(next) =>
+              setForm({ ...form, playback: { ...form.playback, pauseWhenAlone: next } })
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Connection</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Toggle
+            label="Reconnect automatically"
+            hint="Brings the bot back after a server restart, a network drop or a kick, retrying with a growing delay. Turn it off to make the bot stay wherever you left it — including off the server."
+            checked={form.connectionSettings?.autoReconnect ?? true}
+            onChange={(next) =>
+              setForm({
+                ...form,
+                connectionSettings: { ...form.connectionSettings, autoReconnect: next },
+              })
+            }
+          />
         </CardContent>
       </Card>
 

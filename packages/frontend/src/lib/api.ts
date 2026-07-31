@@ -92,6 +92,8 @@ export interface InstanceDetail {
     pauseWhenAlone?: boolean;
   };
   commands: { prefix: string; requireSameChannel: boolean };
+  /** Optional: a backend one deploy behind the panel omits it. */
+  connectionSettings?: { autoReconnect?: boolean };
   permissions: { defaultRole: Role; whitelistOnly: boolean };
   /** Optional: a backend one deploy behind the panel omits it. */
   grants?: { identities: Record<string, Role>; serverGroups: Record<string, Role> };
@@ -108,6 +110,7 @@ export interface UpdateInstanceBody {
   };
   serverPassword?: string;
   playback?: { pauseWhenAlone?: boolean };
+  connectionSettings?: { autoReconnect?: boolean };
   grants?: { serverGroups: Record<string, Role>; identities: Record<string, Role> };
 }
 

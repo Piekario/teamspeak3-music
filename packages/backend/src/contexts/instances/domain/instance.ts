@@ -23,6 +23,7 @@ export interface InstanceConfig {
   readonly audio: AudioEndpoint;
   readonly playback: PlaybackSettings;
   readonly commands: CommandSettings;
+  readonly connection: ConnectionSettings;
   readonly permissions: PermissionPolicy;
   readonly grants: RoleGrants;
 }
@@ -52,6 +53,16 @@ export interface PlaybackSettings extends QueueLimits {
    * notice why.
    */
   readonly pauseWhenAlone: boolean;
+}
+
+export interface ConnectionSettings {
+  /**
+   * Bring the bot back automatically when it drops off the server.
+   *
+   * On by default: a music bot that quietly stays gone after a server restart is worse than
+   * useless. Turning it off is for when somebody wants the bot to stay where they put it.
+   */
+  readonly autoReconnect: boolean;
 }
 
 export interface CommandSettings {
@@ -86,6 +97,7 @@ export function createInstanceConfig(raw: {
   audio: { pulseServer: string; sinkName?: string };
   playback?: Partial<PlaybackSettings>;
   commands?: Partial<CommandSettings>;
+  connection?: Partial<ConnectionSettings>;
   permissions?: Partial<PermissionPolicy>;
   grants?: {
     identities?: Record<string, Role>;
@@ -146,6 +158,9 @@ export function createInstanceConfig(raw: {
       voteSkipEnabled: raw.playback?.voteSkipEnabled ?? false,
       voteSkipRatio: raw.playback?.voteSkipRatio ?? 0.5,
       pauseWhenAlone: raw.playback?.pauseWhenAlone ?? false,
+    },
+    connection: {
+      autoReconnect: raw.connection?.autoReconnect ?? true,
     },
     commands: {
       prefix: raw.commands?.prefix ?? '!',

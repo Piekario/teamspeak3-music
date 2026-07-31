@@ -13,6 +13,11 @@ export interface ConnectionSupervisorOptions {
   readonly logger: SupervisorLogger;
   /** Attempts to bring the bot back onto the TeamSpeak server. */
   readonly reconnect: () => void;
+  /**
+   * Whether retrying is wanted at all. Read through a getter rather than captured, so that
+   * turning the setting off in the panel stops a retry loop that is already running.
+   */
+  readonly isEnabled?: () => boolean;
   readonly minDelayMs?: number;
   readonly maxDelayMs?: number;
 }
@@ -67,6 +72,13 @@ export class ConnectionSupervisor {
   /** Feeds the supervisor the connection state the transport reports. */
   observe(state: ConnectionState): void {
     if (!this.#enabled) return;
+
+    // Checked on every observation, not once at start-up: an operator who switches
+    // auto-reconnect off mid-outage means "stop trying now", not "stop trying next time".
+    if (this.#options.isEnabled?.() === false) {
+      this.#clear();
+      return;
+    }
 
     if (state === 'connected') {
       if (this.#attempt > 0) {

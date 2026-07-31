@@ -40,6 +40,12 @@ const createInstanceSchema = z.object({
     })
     .partial()
     .optional(),
+  connectionSettings: z
+    .object({
+      autoReconnect: z.boolean(),
+    })
+    .partial()
+    .optional(),
   /** Which TeamSpeak server groups may use the bot, and in what role. */
   grants: z
     .object({
@@ -128,6 +134,11 @@ export function registerInstanceAdminRoutes(
       playback: {
         ...current.playback,
         pauseWhenAlone: body.playback?.pauseWhenAlone ?? current.playback.pauseWhenAlone,
+      },
+      connection: {
+        ...current.connection,
+        autoReconnect:
+          body.connectionSettings?.autoReconnect ?? current.connection.autoReconnect,
       },
       commands: current.commands,
       permissions: current.permissions,
