@@ -163,19 +163,22 @@ export class InstanceRuntime {
           homeChannelId: this.#config.teamspeak.homeChannelId,
         }),
         webUrl: deps.webUrl,
+        // Lazy: `!help` describes the registry it is being registered into, which does not
+        // exist yet at this point.
+        registry: () => registry,
+        // The dispatcher's own rule, so help never lists a command it would then refuse.
+        canUse: (invoker, command) =>
+          this.#permissions().can(
+            { uid: invoker.uid, serverGroupIds: invoker.serverGroupIds },
+            command,
+          ).allowed,
       }),
     );
 
     this.#dispatcher = new CommandDispatcher({
       instanceId: this.#config.id,
       registry,
-      // Rebuilt per dispatch so a reconfigured instance takes effect without a reconnect.
-      permissions: () =>
-        new PermissionResolver({
-          policy: this.#config.permissions,
-          identityGrants: new Map(Object.entries(this.#config.grants.identities)),
-          groupGrants: this.#config.grants.serverGroups,
-        }),
+      permissions: () => this.#permissions(),
       settings: () => ({
         prefix: this.#config.commands.prefix,
         requireSameChannel: this.#config.commands.requireSameChannel,
@@ -300,6 +303,18 @@ export class InstanceRuntime {
 
     this.#setConnectionState('connected', null);
     await this.#publishStatus();
+  }
+
+  /**
+   * Built fresh on each use rather than cached, so a reconfigured instance takes effect
+   * without a reconnect. Shared by the dispatcher and by `!help`, which must agree.
+   */
+  #permissions(): PermissionResolver {
+    return new PermissionResolver({
+      policy: this.#config.permissions,
+      identityGrants: new Map(Object.entries(this.#config.grants.identities)),
+      groupGrants: this.#config.grants.serverGroups,
+    });
   }
 
   #setConnectionState(state: ConnectionState, error: string | null): void {

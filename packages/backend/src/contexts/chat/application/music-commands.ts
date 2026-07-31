@@ -4,13 +4,17 @@ import type { Clock } from '../../../shared-kernel/clock.ts';
 import type { BotClient } from '../../instances/domain/bot-client.ts';
 import type { PlaybackService } from '../../playback/application/playback-service.ts';
 import { ClientUid, Volume } from '../../playback/domain/values.ts';
+import type { CommandName } from '@tsmusic/shared';
+
 import {
+  CommandRegistry,
   defineCommand,
   reply,
   RESOLVING_COOLDOWN_MS,
   SILENT_REPLY,
   type CommandContext,
   type CommandDefinition,
+  type CommandInvoker,
 } from '../domain/command-definition.ts';
 import { looksLikeUrl, parseTimecode } from '../domain/command-parser.ts';
 import { formatNowPlaying, formatQueuePage, formatSearchResults, formatTrack } from './format.ts';
@@ -23,6 +27,13 @@ export interface MusicCommandDependencies {
   readonly clock: Clock;
   readonly settings: () => { readonly prefix: string; readonly homeChannelId: number | null };
   readonly webUrl?: string | undefined;
+  /**
+   * Read lazily: `!help` has to describe the registry it lives in, which does not exist yet
+   * when these definitions are built.
+   */
+  readonly registry: () => CommandRegistry;
+  /** Same rule the dispatcher applies, so help never lists what it would then refuse. */
+  readonly canUse: (invoker: CommandInvoker, command: CommandName) => boolean;
 }
 
 const SEARCH_RESULT_COUNT = 5;
@@ -309,6 +320,55 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
       usage: '!ping',
       summary: 'Check the bot is alive',
       handler: async () => reply('pong'),
+    }),
+
+    defineCommand({
+      name: 'help',
+      aliases: ['?', 'commands'],
+      defaultRole: 'user',
+      usage: '!help [command]',
+      summary: 'List what you can do',
+      handler: async (context) => {
+        const prefix = deps.settings().prefix;
+        const registry = deps.registry();
+        const named = context.command.arguments[0];
+
+        if (named !== undefined) {
+          const definition = registry.find(named.replace(prefix, ''));
+          // Unknown and not-allowed are answered identically on purpose: telling somebody a
+          // command exists but is closed to them is an invitation to go looking for a way in.
+          if (definition === undefined || !deps.canUse(context.invoker, definition.name)) {
+            return reply(`No command called "${named}" that you can use.`);
+          }
+
+          const aliases =
+            definition.aliases.length === 0
+              ? ''
+              : `\nAlso: ${definition.aliases.map((alias) => prefix + alias).join(', ')}`;
+
+          return reply(
+            `${prefix}${definition.name} — ${definition.summary}\n` +
+              `Usage: ${definition.usage.replace(/^!/, prefix)}${aliases}`,
+          );
+        }
+
+        // Only what this person may actually run. A list full of commands that refuse them
+        // is worse than no list at all.
+        const usable = registry.all.filter((definition) =>
+          deps.canUse(context.invoker, definition.name),
+        );
+
+        if (usable.length === 0) return reply('You cannot use any commands here.');
+
+        const lines = usable.map(
+          (definition) => `${prefix}${definition.name} — ${definition.summary}`,
+        );
+
+        return reply(
+          `${lines.join('\n')}\n` +
+            `Ask about one with ${prefix}help <command>.`,
+        );
+      },
     }),
   ];
 }
