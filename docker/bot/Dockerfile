@@ -1,7 +1,10 @@
 # The bot stays on the host's native architecture. Only the TeamSpeak client is emulated,
 # which matters because ffmpeg is the CPU-hungry part of this system and reaches PulseAudio
 # over TCP rather than needing to live beside it.
-FROM node:22-bookworm-slim AS build
+# Trixie rather than bookworm: better-sqlite3's shipped binaries are built against glibc
+# 2.38, and bookworm has 2.36 — the module loads on neither the build stage nor the runtime
+# one without it, and compiling instead would mean carrying a toolchain in the image.
+FROM node:22-trixie-slim AS build
 
 WORKDIR /app
 RUN corepack enable
@@ -22,7 +25,7 @@ COPY packages/backend packages/backend
 RUN pnpm --filter @tsmusic/shared build && pnpm --filter @tsmusic/backend build \
  && test -d packages/shared/dist && test -d packages/backend/dist
 
-FROM node:22-bookworm-slim
+FROM node:22-trixie-slim
 
 # ffmpeg produces the audio; pactl sets sink volume; python3 is what yt-dlp runs on.
 RUN apt-get update && apt-get install -y --no-install-recommends \
