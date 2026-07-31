@@ -37,6 +37,10 @@ const createInstanceSchema = z.object({
   playback: z
     .object({
       pauseWhenAlone: z.boolean(),
+      /** 0 means no limit; the cap is a day, which is longer than anything anyone queues. */
+      maxTrackSeconds: z.number().int().min(0).max(86_400),
+      maxPerUser: z.number().int().min(0).max(500),
+      allowLiveStreams: z.boolean(),
     })
     .partial()
     .optional(),
@@ -145,6 +149,9 @@ export function registerInstanceAdminRoutes(
       playback: {
         ...current.playback,
         pauseWhenAlone: body.playback?.pauseWhenAlone ?? current.playback.pauseWhenAlone,
+        maxTrackSeconds: body.playback?.maxTrackSeconds ?? current.playback.maxTrackSeconds,
+        maxPerUser: body.playback?.maxPerUser ?? current.playback.maxPerUser,
+        allowLiveStreams: body.playback?.allowLiveStreams ?? current.playback.allowLiveStreams,
       },
       connection: {
         ...current.connection,

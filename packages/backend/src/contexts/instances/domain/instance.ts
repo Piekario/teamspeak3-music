@@ -152,7 +152,7 @@ export function createInstanceConfig(raw: {
     },
     playback: {
       defaultVolume: raw.playback?.defaultVolume ?? 40,
-      maxTrackSeconds: raw.playback?.maxTrackSeconds ?? 900,
+      maxTrackSeconds: raw.playback?.maxTrackSeconds ?? 0,
       maxPerUser: raw.playback?.maxPerUser ?? 10,
       allowLiveStreams: raw.playback?.allowLiveStreams ?? false,
       voteSkipEnabled: raw.playback?.voteSkipEnabled ?? false,

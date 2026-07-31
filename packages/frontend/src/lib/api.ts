@@ -100,6 +100,7 @@ export interface InstanceDetail {
     defaultVolume?: number;
     maxTrackSeconds?: number;
     maxPerUser?: number;
+    allowLiveStreams?: boolean;
     pauseWhenAlone?: boolean;
   };
   commands: { prefix: string; requireSameChannel: boolean };
@@ -120,7 +121,12 @@ export interface UpdateInstanceBody {
     channelPassword?: string;
   };
   serverPassword?: string;
-  playback?: { pauseWhenAlone?: boolean };
+  playback?: {
+    pauseWhenAlone?: boolean;
+    maxTrackSeconds?: number;
+    maxPerUser?: number;
+    allowLiveStreams?: boolean;
+  };
   connectionSettings?: { autoReconnect?: boolean };
   grants?: { serverGroups: Record<string, Role>; identities: Record<string, Role> };
 }

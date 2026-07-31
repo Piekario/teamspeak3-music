@@ -44,6 +44,21 @@ function Field({
   );
 }
 
+/**
+ * Minutes on screen, seconds on the wire.
+ *
+ * Rounded up, so a limit typed as a whole number of minutes never refuses a track of exactly
+ * that length on a rounding error nobody can see.
+ */
+function secondsToMinutes(seconds: number): string {
+  return String(Math.ceil(seconds / 60));
+}
+
+function minutesToSeconds(minutes: string): number {
+  const parsed = Number.parseInt(minutes, 10);
+  return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed * 60;
+}
+
 /** A checkbox with the label and explanation beside it, the shape every toggle here takes. */
 function Toggle({
   label,
@@ -95,6 +110,10 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
   const [serverPassword, setServerPassword] = useState('');
   const [groups, setGroups] = useState<Record<string, Role>>({});
   const [newGroupId, setNewGroupId] = useState('');
+  // Held as text, not numbers: a number input mid-edit is briefly empty, and coercing that
+  // to 0 would silently turn "clearing the field to retype it" into "no limit".
+  const [longestTrack, setLongestTrack] = useState('0');
+  const [perUser, setPerUser] = useState('0');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -112,6 +131,8 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
       },
     });
     setGroups(detail.data.grants?.serverGroups ?? {});
+    setLongestTrack(secondsToMinutes(detail.data.playback?.maxTrackSeconds ?? 0));
+    setPerUser(String(detail.data.playback?.maxPerUser ?? 0));
   }, [detail.data]);
 
   const save = useMutation({
@@ -128,7 +149,12 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
           ...(channelPassword === '' ? {} : { channelPassword }),
         },
         ...(serverPassword === '' ? {} : { serverPassword }),
-        playback: { pauseWhenAlone: form.playback?.pauseWhenAlone ?? false },
+        playback: {
+          pauseWhenAlone: form.playback?.pauseWhenAlone ?? false,
+          maxTrackSeconds: minutesToSeconds(longestTrack),
+          maxPerUser: Number.parseInt(perUser, 10) || 0,
+          allowLiveStreams: form.playback?.allowLiveStreams ?? false,
+        },
         connectionSettings: { autoReconnect: form.connectionSettings?.autoReconnect ?? true },
         // Identities are passed through untouched: this screen edits group grants, and
         // sending an empty object would revoke every individual grant as a side effect.
@@ -334,8 +360,54 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
       <Card>
         <CardHeader>
           <CardTitle>Playback</CardTitle>
+          <CardDescription>
+            Limits are per bot. Zero means no limit — long recordings are what a music bot is
+            for, and the one somebody regrets is what <code className="font-mono">!skip</code>{' '}
+            is for.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              id="settings-longest-track"
+              label="Longest track (minutes)"
+              hint="0 = no limit. A ten-hour mix is 600."
+            >
+              <Input
+                id="settings-longest-track"
+                type="number"
+                min={0}
+                max={1440}
+                value={longestTrack}
+                onChange={(event) => setLongestTrack(event.target.value)}
+              />
+            </Field>
+
+            <Field
+              id="settings-per-user"
+              label="Queued tracks per person"
+              hint="0 = no limit. Stops one person filling the queue."
+            >
+              <Input
+                id="settings-per-user"
+                type="number"
+                min={0}
+                max={500}
+                value={perUser}
+                onChange={(event) => setPerUser(event.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Toggle
+            label="Allow live streams"
+            hint="A stream never ends, so it holds the queue until somebody skips it. This is the setting that actually guards against that — a length limit cannot, since a stream reports no length."
+            checked={form.playback?.allowLiveStreams ?? false}
+            onChange={(next) =>
+              setForm({ ...form, playback: { ...form.playback, allowLiveStreams: next } })
+            }
+          />
+
           <Toggle
             label="Pause when nobody is listening"
             hint="Pauses while the bot is alone in its channel and resumes when somebody returns. A pause you made yourself is never overridden. Leave off for a bot that is meant to keep broadcasting to an empty room."

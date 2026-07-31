@@ -12,7 +12,14 @@ import { ClientUid, QueueItemId } from './values.ts';
  */
 
 export interface QueueLimits {
-  /** Reject tracks longer than this, so nobody queues a ten-hour livestream. 0 disables. */
+  /**
+   * Reject tracks longer than this. 0, the default, means no limit.
+   *
+   * A length cap is a poor guard against the thing it looks like it guards against: an
+   * endless livestream is caught by `allowLiveStreams`, while a long *recording* — a DJ set,
+   * a full album, a ten-hour rain loop — is exactly what people want a music bot for. `!skip`
+   * handles the one somebody regrets.
+   */
   readonly maxTrackSeconds: number;
   /** Cap on pending items per requester, so one person cannot monopolise the queue. 0 disables. */
   readonly maxPerUser: number;
@@ -20,7 +27,7 @@ export interface QueueLimits {
 }
 
 export const DEFAULT_QUEUE_LIMITS: QueueLimits = Object.freeze({
-  maxTrackSeconds: 900,
+  maxTrackSeconds: 0,
   maxPerUser: 10,
   allowLiveStreams: false,
 });
