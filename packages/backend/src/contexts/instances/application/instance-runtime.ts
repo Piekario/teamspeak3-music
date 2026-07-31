@@ -185,7 +185,7 @@ export class InstanceRuntime {
     return this.#playback;
   }
 
-  get bot(): ClientQueryBotClient {
+  get bot(): BotClient {
     return this.#bot;
   }
 

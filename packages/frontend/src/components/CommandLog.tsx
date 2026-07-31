@@ -1,5 +1,8 @@
-import type { TimestampedCommand } from '../store/live-store.ts';
+import { MessageSquare } from 'lucide-react';
+
 import { formatRelativeTime } from '../lib/format.ts';
+import type { TimestampedCommand } from '../store/live-store.ts';
+import { Card } from './ui/card.tsx';
 
 interface CommandLogProps {
   readonly entries: readonly TimestampedCommand[];
@@ -8,57 +11,57 @@ interface CommandLogProps {
 /**
  * A live view of what people are typing in TeamSpeak.
  *
- * Refusals are shown as prominently as successes on purpose: "why did the bot ignore me"
- * is the most common question an operator gets, and the answer is almost always a role or
- * a cooldown that only this log makes visible.
+ * Refusals are shown as prominently as successes on purpose: "why did the bot ignore me" is
+ * the most common question an operator gets, and the answer is almost always a role or a
+ * cooldown that only this log makes visible.
  */
 export function CommandLog({ entries }: CommandLogProps) {
-  if (entries.length === 0) {
-    return (
-      <section className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-slate-300">Chat commands</h2>
-        <p className="text-sm text-slate-500">Nothing yet.</p>
-      </section>
-    );
-  }
-
   return (
-    <section className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-      <h2 className="mb-2 text-sm font-semibold text-slate-300">Chat commands</h2>
-      <ul className="max-h-72 space-y-1 overflow-y-auto text-sm">
-        {entries.map((entry, index) => (
-          <li
-            key={`${entry.at}-${index}`}
-            className="flex items-start gap-2 border-b border-slate-700/50 pb-1 last:border-0"
-          >
-            <span
-              className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                entry.allowed ? 'bg-emerald-400' : 'bg-rose-500'
-              }`}
-              aria-hidden="true"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-slate-200">
-                <span className="text-slate-400">{entry.nickname}</span>{' '}
-                <span className="font-mono">
-                  {entry.command}
-                  {entry.args.length > 0 && ` ${entry.args}`}
-                </span>
-              </p>
-              {entry.reply !== null && entry.reply.length > 0 && (
-                <p
-                  className={`truncate text-xs ${entry.allowed ? 'text-slate-500' : 'text-rose-400'}`}
-                >
-                  {entry.reply}
+    <Card className="overflow-hidden">
+      <header className="border-b px-5 py-3.5">
+        <h2 className="flex items-center gap-2 font-semibold">
+          <MessageSquare className="size-4 text-muted-foreground" />
+          Chat commands
+        </h2>
+      </header>
+
+      {entries.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Nothing yet.</p>
+      ) : (
+        <ul className="max-h-80 divide-y overflow-y-auto">
+          {entries.map((entry, index) => (
+            <li key={`${entry.at}-${index}`} className="flex items-start gap-2.5 px-5 py-2.5">
+              <span
+                className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+                  entry.allowed ? 'bg-success' : 'bg-destructive'
+                }`}
+                aria-hidden="true"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">
+                  <span className="text-muted-foreground">{entry.nickname}</span>{' '}
+                  <span className="font-mono text-xs">
+                    {entry.command}
+                    {entry.args.length > 0 && ` ${entry.args}`}
+                  </span>
                 </p>
-              )}
-            </div>
-            <time className="shrink-0 text-xs text-slate-600">
-              {formatRelativeTime(entry.at)}
-            </time>
-          </li>
-        ))}
-      </ul>
-    </section>
+                {entry.reply !== null && entry.reply.length > 0 && (
+                  <p
+                    className={`truncate text-xs ${
+                      entry.allowed ? 'text-muted-foreground' : 'text-destructive'
+                    }`}
+                  >
+                    {entry.reply}
+                  </p>
+                )}
+              </div>
+              <time className="shrink-0 text-xs text-muted-foreground">
+                {formatRelativeTime(entry.at)}
+              </time>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

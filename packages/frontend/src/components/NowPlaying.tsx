@@ -1,82 +1,104 @@
 import type { PlayerState } from '@tsmusic/shared';
+import { Music2, Radio } from 'lucide-react';
+import { useState } from 'react';
 
 import { useInterpolatedPosition } from '../hooks/use-interpolated-position.ts';
-import { formatDuration, progressRatio } from '../lib/format.ts';
+import { formatDuration } from '../lib/format.ts';
+import { Badge } from './ui/badge.tsx';
+import { Card } from './ui/card.tsx';
+import { Slider } from './ui/slider.tsx';
 
 interface NowPlayingProps {
   readonly player: PlayerState | null;
+  readonly disabled: boolean;
   readonly onSeek: (positionSec: number) => void;
 }
 
-export function NowPlaying({ player, onSeek }: NowPlayingProps) {
+export function NowPlaying({ player, disabled, onSeek }: NowPlayingProps) {
   const position = useInterpolatedPosition(player);
+  const [scrubbing, setScrubbing] = useState<number | null>(null);
   const current = player?.current ?? null;
 
   if (current === null) {
     return (
-      <section className="rounded-lg border border-slate-700 bg-slate-800/50 p-6">
-        <p className="text-slate-400">Nothing is playing.</p>
-      </section>
+      <Card className="flex items-center gap-4 p-5">
+        <div className="grid size-16 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+          <Music2 className="size-6" />
+        </div>
+        <div>
+          <p className="font-medium">Nothing is playing</p>
+          <p className="text-sm text-muted-foreground">
+            Add a track above, or use <code className="font-mono text-xs">!play</code> in
+            TeamSpeak.
+          </p>
+        </div>
+      </Card>
     );
   }
 
   const { track, requestedBy } = current;
   const duration = track.durationSec;
-  // A livestream has no meaningful length, so scrubbing it would be a lie.
+  // A livestream has no meaningful length, so offering to scrub it would be a lie.
   const seekable = duration !== null && duration > 0;
-  const ratio = progressRatio(position, duration);
+  // While dragging, the bar follows the pointer rather than the server, which would otherwise
+  // yank it back on every incoming state update.
+  const shown = scrubbing ?? position;
 
   return (
-    <section className="rounded-lg border border-slate-700 bg-slate-800/50 p-6">
-      <div className="flex gap-4">
-        {track.thumbnailUrl !== null && (
+    <Card className="overflow-hidden">
+      <div className="flex gap-4 p-5">
+        {track.thumbnailUrl === null ? (
+          <div className="grid size-20 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+            <Music2 className="size-7" />
+          </div>
+        ) : (
           <img
             src={track.thumbnailUrl}
             alt=""
-            className="h-20 w-20 shrink-0 rounded object-cover"
+            className="size-20 shrink-0 rounded-md object-cover"
           />
         )}
 
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-slate-100" title={track.title}>
-            {track.title}
-          </h2>
+          <div className="flex items-start gap-2">
+            <h2 className="min-w-0 flex-1 truncate text-lg font-semibold" title={track.title}>
+              {track.title}
+            </h2>
+            {track.isLive && (
+              <Badge variant="destructive" className="shrink-0">
+                <Radio className="size-3" /> Live
+              </Badge>
+            )}
+          </div>
+
           {track.uploader !== null && (
-            <p className="truncate text-sm text-slate-400">{track.uploader}</p>
+            <p className="truncate text-sm text-muted-foreground">{track.uploader}</p>
           )}
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 truncate text-xs text-muted-foreground">
             Requested by {requestedBy.nickname}
-            {track.isLive && ' · live'}
           </p>
         </div>
       </div>
 
-      <div className="mt-4">
-        <input
-          type="range"
-          min={0}
+      <div className="px-5 pb-5">
+        <Slider
+          value={[seekable ? Math.min(shown, duration) : 0]}
           max={seekable ? duration : 1}
           step={1}
-          value={seekable ? Math.min(position, duration) : 0}
-          disabled={!seekable}
-          onChange={(changeEvent) => onSeek(Number(changeEvent.target.value))}
+          disabled={disabled || !seekable}
           aria-label="Seek"
-          className="w-full accent-emerald-400 disabled:opacity-40"
+          onValueChange={([value]) => setScrubbing(value ?? 0)}
+          onValueCommit={([value]) => {
+            if (value !== undefined) onSeek(value);
+            setScrubbing(null);
+          }}
         />
-        <div className="mt-1 flex justify-between text-xs tabular-nums text-slate-400">
-          <span>{formatDuration(position)}</span>
+
+        <div className="mt-2 flex justify-between text-xs tabular-nums text-muted-foreground">
+          <span>{formatDuration(shown)}</span>
           <span>{seekable ? formatDuration(duration) : 'live'}</span>
         </div>
-        <div
-          className="mt-1 h-1 overflow-hidden rounded bg-slate-700"
-          role="progressbar"
-          aria-valuenow={Math.round(ratio * 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div className="h-full bg-emerald-400" style={{ width: `${ratio * 100}%` }} />
-        </div>
       </div>
-    </section>
+    </Card>
   );
 }

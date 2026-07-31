@@ -65,10 +65,26 @@ export interface TrackRequestBody {
   position?: number;
 }
 
+export interface CreateInstanceBody {
+  id: string;
+  name: string;
+  teamspeak: { host: string; port: number; nickname: string };
+  serverPassword: string | null;
+}
+
 export const api = {
   health: () => request<{ status: string; at: string }>('/api/health'),
 
   listInstances: () => request<{ instances: InstanceSummary[] }>('/api/instances'),
+
+  createInstance: (body: CreateInstanceBody) =>
+    request<{ id: string }>('/api/instances', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteInstance: (instanceId: string) =>
+    request<void>(`/api/instances/${encodeURIComponent(instanceId)}`, { method: 'DELETE' }),
 
   getPlayer: (instanceId: string) =>
     request<PlayerState>(`/api/instances/${encodeURIComponent(instanceId)}/player`),

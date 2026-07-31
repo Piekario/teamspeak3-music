@@ -2,14 +2,107 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Design tokens in shadcn/ui's convention: HSL channel triplets, semantic names, themed by
+ * swapping values rather than writing every component twice with `dark:` variants.
+ *
+ * The two themes are not mirror images. Dark separates surfaces with lightness and keeps
+ * borders quiet; light separates with borders and shadow and keeps surfaces near-white,
+ * because identical contrast ratios do not read the same way in both directions.
+ */
 @layer base {
-  body {
-    @apply bg-slate-900 text-slate-100 antialiased;
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+
+    --primary: 158 79% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 10%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 79% 30%;
+    --warning: 38 92% 40%;
+
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 158 79% 30%;
+
+    --radius: 0.65rem;
   }
 
-  /* The panel is a control surface that tends to sit open on a second screen for hours,
-     so it commits to a dark theme rather than following the OS. */
-  code {
-    @apply rounded bg-slate-800 px-1 py-0.5 font-mono text-[0.9em];
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 6% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 6% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Lifted and desaturated for dark: the light primary reads as muddy on a dark canvas. */
+    --primary: 158 64% 52%;
+    --primary-foreground: 240 10% 4%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 240 10% 4%;
+
+    --success: 158 64% 52%;
+    --warning: 48 96% 60%;
+
+    --border: 240 4% 18%;
+    --input: 240 4% 18%;
+    --ring: 158 64% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Colour transitions are enabled only after the first paint, so a reload settles into the
+     theme instead of animating through the wrong one. */
+  .theme-ready * {
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
   }
 }

@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     }),
   ];
 
-  const { db, close: closeDatabase } = openDatabase(config.DATABASE_PATH);
+  const { db } = openDatabase(config.DATABASE_PATH);
   const instanceRepository = new DrizzleInstanceRepository(
     db,
     scopedLogger(logger, { component: 'db' }),

@@ -1,4 +1,5 @@
 import type { RepeatMode, Track } from '@tsmusic/shared';
+import { TriangleAlert, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -71,20 +72,24 @@ export function DashboardPage({ instanceId }: DashboardPageProps) {
       {error !== null && (
         <div
           role="alert"
-          className="flex items-start justify-between gap-3 rounded border border-rose-700 bg-rose-950/50 px-4 py-2 text-sm text-rose-200"
+          className="flex items-start justify-between gap-3 rounded-md border border-destructive/40
+                     bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
         >
           <span>{error}</span>
           <button type="button" onClick={() => setError(null)} aria-label="Dismiss error">
-            ✕
+            <X className="size-4" />
           </button>
         </div>
       )}
 
       {disabled && (
-        <div className="rounded border border-amber-700 bg-amber-950/40 px-4 py-2 text-sm text-amber-200">
-          This bot is {live.connection}
-          {live.connectionError !== null && `: ${live.connectionError}`}. Controls are disabled
-          until it reconnects.
+        <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">
+          <TriangleAlert className="size-4 shrink-0" />
+          <span>
+            This bot is {live.connection}
+            {live.connectionError !== null && `: ${live.connectionError}`}. Controls stay
+            disabled until it reconnects.
+          </span>
         </div>
       )}
 
@@ -100,6 +105,7 @@ export function DashboardPage({ instanceId }: DashboardPageProps) {
 
       <NowPlaying
         player={live.player}
+        disabled={disabled}
         onSeek={run((positionSec: number) => api.seek(instanceId, positionSec))}
       />
 
