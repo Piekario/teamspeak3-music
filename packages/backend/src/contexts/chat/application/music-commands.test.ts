@@ -57,18 +57,12 @@ function build(options: { playlists?: Partial<PlaylistService>; allowed?: Set<st
     return (await definition.handler(parsed)).text;
   };
 
-  return { registry, run };
+  return { run };
 }
 
 describe('!help', () => {
-  it('lists only the commands the asker may run', () => {
-    // A list full of commands that refuse them is worse than no list at all.
-    const { registry } = build({ allowed: new Set(['help', 'play']) });
-    const definition = registry.find('help');
-    assert.ok(definition !== undefined);
-  });
-
   it('lists the allowed commands and nothing else', async () => {
+    // A list full of commands that refuse them is worse than no list at all.
     const { run } = build({ allowed: new Set(['help', 'play']) });
 
     const answer = await run('help');
