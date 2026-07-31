@@ -14,7 +14,7 @@
   "dependencies": {
     "@fastify/websocket": "^11.0.2",
     "@tsmusic/shared": "workspace:*",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^13.0.2",
     "drizzle-orm": "^0.38.2",
     "fastify": "^5.2.0",
     "fastify-type-provider-zod": "^4.0.2",
