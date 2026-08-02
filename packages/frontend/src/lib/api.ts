@@ -21,20 +21,7 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_STORAGE_KEY = 'tsmusic.token';
 const SELECTED_INSTANCE_KEY = 'tsmusic.instance';
-
-export function readStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function storeToken(token: string): void {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredToken(): void {
-  localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
 
 /** Which bot the panel was last looking at, so a refresh lands where you left off. */
 export function readSelectedInstance(): string | null {
@@ -47,12 +34,13 @@ export function storeSelectedInstance(instanceId: string | null): void {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = readStoredToken();
   const headers = new Headers(init.headers);
-  if (token !== null) headers.set('Authorization', `Bearer ${token}`);
   if (init.body !== undefined) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(path, { ...init, headers });
+  // The credential is a cookie the server set and scripts cannot read, so there is nothing
+  // to attach here. `same-origin` is the default, and stated rather than assumed because the
+  // whole session depends on it.
+  const response = await fetch(path, { ...init, headers, credentials: 'same-origin' });
 
   if (response.status === 204) return undefined as T;
 
@@ -179,6 +167,15 @@ export interface PanelToken {
 }
 
 export const api = {
+  /** Exchanges a token for a session cookie. The token never touches storage a script reads. */
+  signIn: (token: string) =>
+    request<{ label: string; role: Role; instanceId: string | null }>('/api/session', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  signOut: () => request<void>('/api/session', { method: 'DELETE' }),
+
   health: () => request<{ status: string; at: string }>('/api/health'),
 
   /** Who this token belongs to, and what it may do. */

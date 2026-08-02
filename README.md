@@ -169,6 +169,20 @@ They are the same four roles the chat commands use, applied to the same actions:
 DJ command, so the skip button is a DJ button. One permission model, not two that drift apart
 the first time somebody is promoted in one and forgotten in the other.
 
+Signing in exchanges the token for a session cookie the server sets. Nobody has to keep the
+token anywhere or type it again on that browser, and because the cookie is `HttpOnly` a
+script that manages to run on the panel cannot read it — which it could when the token lived
+in `localStorage`. `SameSite=Strict` is what makes an automatically-attached cookie safe:
+without it, any other site could issue commands as whoever is signed in. It also lets the
+live socket stop carrying the credential in its query string, where it was landing in every
+access log between the browser and the bot.
+
+The bearer header still works, so scripts and `curl` need no session:
+
+```
+curl -H "Authorization: Bearer $TOKEN" https://bot.example.com/api/instances
+```
+
 Two details worth knowing:
 
 - **A token is shown once.** Only its hash is stored, so nothing in the panel or the database

@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button.tsx';
 import { Card } from '../components/ui/card.tsx';
 import { Input } from '../components/ui/input.tsx';
 import type { useTheme } from '../hooks/use-theme.ts';
-import { api, clearStoredToken, storeToken } from '../lib/api.ts';
+import { api } from '../lib/api.ts';
 
 interface TokenGateProps {
   readonly theme: ReturnType<typeof useTheme>;
@@ -14,11 +14,12 @@ interface TokenGateProps {
 }
 
 /**
- * Collects the operator token.
+ * Collects a token and trades it for a session.
  *
- * The token is verified with a real authenticated request before being accepted, so a typo
- * fails here with a clear message instead of leaving the panel in a state where every later
- * action silently 401s.
+ * The token is verified by the exchange itself, so a typo fails here with a clear message
+ * instead of leaving the panel in a state where every later action silently 401s. What comes
+ * back is a cookie the server set: the token is never written anywhere a script can read it,
+ * and nobody has to type it again on this browser.
  */
 export function TokenGate({ theme, onAuthenticated }: TokenGateProps) {
   const [token, setToken] = useState('');
@@ -31,13 +32,11 @@ export function TokenGate({ theme, onAuthenticated }: TokenGateProps) {
 
     setChecking(true);
     setError(null);
-    storeToken(trimmed);
 
     try {
-      await api.listInstances();
+      await api.signIn(trimmed);
       onAuthenticated();
     } catch {
-      clearStoredToken();
       setError('That token was not accepted.');
     } finally {
       setChecking(false);

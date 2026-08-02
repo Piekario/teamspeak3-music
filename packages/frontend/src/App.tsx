@@ -11,14 +11,7 @@ import { cn } from './lib/utils.ts';
 import { useCan, useIdentity } from './hooks/use-identity.ts';
 import { useLiveSocket } from './hooks/use-live-socket.ts';
 import { useTheme } from './hooks/use-theme.ts';
-import {
-  ApiError,
-  api,
-  clearStoredToken,
-  readSelectedInstance,
-  readStoredToken,
-  storeSelectedInstance,
-} from './lib/api.ts';
+import { ApiError, api, readSelectedInstance, storeSelectedInstance } from './lib/api.ts';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { PlaylistsPage } from './pages/PlaylistsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
@@ -34,15 +27,47 @@ const TAB_ICONS = {
 import { useLiveStore } from './store/live-store.ts';
 
 export function App() {
-  const [authenticated, setAuthenticated] = useState(() => readStoredToken() !== null);
   // Mounted at the root so the theme applies to the sign-in screen too.
   const theme = useTheme();
+  const queryClient = useQueryClient();
 
-  if (!authenticated) {
-    return <TokenGate theme={theme} onAuthenticated={() => setAuthenticated(true)} />;
+  /**
+   * Whether the browser already holds a session.
+   *
+   * Asked of the server rather than read from storage, because the cookie carrying it is
+   * invisible to scripts — which is the point of it. No retry: a 401 here is an answer, not
+   * a failure worth attempting again.
+   */
+  const session = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.me(),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+  // Deliberately blank rather than a spinner: the answer arrives in milliseconds from the
+  // same origin, and a flash of loading state before a sign-in form reads as a glitch.
+  if (session.isPending) return <div className="h-full bg-background" />;
+
+  if (session.isError) {
+    return (
+      <TokenGate
+        theme={theme}
+        onAuthenticated={() => {
+          void queryClient.invalidateQueries({ queryKey: ['me'] });
+        }}
+      />
+    );
   }
 
-  return <Shell theme={theme} onSignOut={() => setAuthenticated(false)} />;
+  return (
+    <Shell
+      theme={theme}
+      onSignOut={() => {
+        void queryClient.invalidateQueries({ queryKey: ['me'] });
+      }}
+    />
+  );
 }
 
 interface ShellProps {
@@ -111,9 +136,13 @@ function Shell({ theme, onSignOut }: ShellProps) {
   }, [selectedId]);
 
   const signOut = (): void => {
-    clearStoredToken();
-    resetLive();
-    onSignOut();
+    // Clearing the cookie is the server's to do; the panel only asks and forgets what it
+    // was showing.
+    void api.signOut().finally(() => {
+      resetLive();
+      queryClient.clear();
+      onSignOut();
+    });
   };
 
   const selected = instances.data?.instances.find((instance) => instance.id === selectedId);

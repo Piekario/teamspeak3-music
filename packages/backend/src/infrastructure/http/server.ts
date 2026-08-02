@@ -1,13 +1,13 @@
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { roleSatisfies } from '@tsmusic/shared';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 
 import type { InstanceManager } from '../../contexts/instances/application/instance-manager.ts';
 import type { Clock } from '../../shared-kernel/clock.ts';
 import type { EventSubscriber } from '../../shared-kernel/event-bus.ts';
 import type { Logger, ScopedLogger } from '../logging/logger.ts';
-import { extractToken, tokenMatches } from './auth.ts';
+import { clearedSessionCookie, extractToken, sessionCookie, tokenMatches } from './auth.ts';
 import { HttpError, toErrorResponse } from './errors.ts';
 import type { InstanceRepository } from '../../contexts/instances/domain/instance-repository.ts';
 import {
@@ -79,6 +79,23 @@ async function resolveIdentity(
   };
 }
 
+const sessionSchema = z.object({ token: z.string().min(1).max(500) });
+
+/** Three months: long enough that a streamer signs in once a season, short enough to lapse. */
+const SESSION_MAX_AGE_SEC = 90 * 24 * 60 * 60;
+
+/**
+ * Whether the browser reached us over HTTPS.
+ *
+ * Read from the forwarded header because nothing here terminates TLS: the tunnel and nginx
+ * both sit in front, so the connection Fastify sees is plain HTTP even when the browser's
+ * was not.
+ */
+function isSecure(request: { headers: Record<string, unknown> }): boolean {
+  const forwarded = request.headers['x-forwarded-proto'];
+  return typeof forwarded === 'string' && forwarded.split(',')[0]?.trim() === 'https';
+}
+
 export async function createHttpServer(options: HttpServerOptions): Promise<HttpServer> {
   // Typed as Fastify's own logger interface rather than pino's concrete `Logger`. Both are
   // structurally compatible at runtime, but pino's type carries extra members that would
@@ -97,11 +114,42 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
    */
   app.get('/api/health', async () => ({ status: 'ok', at: options.clock.now().toISOString() }));
 
+  /**
+   * Signing in: the token is exchanged for a cookie the browser keeps.
+   *
+   * Unauthenticated by necessity — this is where a credential is first presented — and
+   * therefore the one route that has to verify it itself.
+   */
+  app.post('/api/session', async (request, reply) => {
+    const body = sessionSchema.parse(request.body);
+    const identity = await resolveIdentity(body.token, options);
+
+    if (identity === undefined) {
+      return await reply.status(401).send({ error: { message: 'unauthorized' } });
+    }
+
+    return await reply
+      .header('Set-Cookie', sessionCookie(body.token, {
+        secure: isSecure(request),
+        maxAgeSec: SESSION_MAX_AGE_SEC,
+      }))
+      .send({ label: identity.label, role: identity.role, instanceId: identity.instanceId });
+  });
+
+  app.delete('/api/session', async (request, reply) => {
+    return await reply
+      .header('Set-Cookie', clearedSessionCookie(isSecure(request)))
+      .status(204)
+      .send();
+  });
+
   app.addHook('onRequest', async (request, reply) => {
     if (request.url === '/api/health') return;
+    // Signing in and out are the two things that cannot require being signed in.
+    if (request.url === '/api/session') return;
 
     const query = request.query as { token?: string } | undefined;
-    const token = extractToken(request.headers.authorization, query?.token);
+    const token = extractToken(request.headers.authorization, query?.token, request.headers.cookie);
     const identity = await resolveIdentity(token, options);
 
     if (identity === undefined) {

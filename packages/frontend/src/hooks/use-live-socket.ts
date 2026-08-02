@@ -2,7 +2,7 @@ import type { AppEvent } from '@tsmusic/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { readStoredToken } from '../lib/api.ts';
+
 import { useLiveStore } from '../store/live-store.ts';
 
 const RECONNECT_MIN_DELAY_MS = 1_000;
@@ -30,15 +30,11 @@ export function useLiveSocket(): void {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connect = (): void => {
-      const token = readStoredToken();
-      if (token === null) return;
-
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // The token rides in the query string because a browser cannot set headers on a
-      // WebSocket handshake. The backend accepts it there for this route only.
-      const socket = new WebSocket(
-        `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`,
-      );
+      // No token in the URL. A browser cannot set headers on a WebSocket handshake, but it
+      // does send cookies with one — which is how the credential stopped being written into
+      // every access log between here and the server.
+      const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
       socketRef.current = socket;
 
       socket.addEventListener('open', () => {
