@@ -17,7 +17,8 @@ interface AddTrackBarProps {
 }
 
 /**
- * One input for both links and search terms, mirroring `!play` in chat.
+ * One input for both links and search terms, mirroring `!add` in chat: it appends rather
+ * than interrupting, which is what a text field with a button reads as.
  *
  * A URL is queued straight away; anything else is searched rather than guessed at, because
  * queueing an unrelated track is more annoying than one extra click.

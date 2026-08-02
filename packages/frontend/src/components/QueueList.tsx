@@ -62,7 +62,7 @@ export function QueueList({
       {queue.length === 0 ? (
         <p className="px-5 py-10 text-center text-sm text-muted-foreground">
           Nothing queued. Paste a link above or use{' '}
-          <code className="font-mono text-xs">!play</code> in TeamSpeak.
+          <code className="font-mono text-xs">!add</code> in TeamSpeak.
         </p>
       ) : (
         <ol className="divide-y">

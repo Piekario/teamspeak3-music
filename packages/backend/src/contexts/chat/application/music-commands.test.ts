@@ -36,10 +36,49 @@ function context(text: string, role: CommandInvoker['role'] = 'dj'): CommandCont
  * `!help` and `!playlist` never reach playback or the TeamSpeak client, so those stay empty
  * stubs — filling them in would only obscure which collaborators these two really have.
  */
-function build(options: { playlists?: Partial<PlaylistService>; allowed?: Set<string> } = {}) {
+/** Records what the commands asked playback to do, without a queue or an audio output. */
+class FakePlayback {
+  isActive = false;
+  readonly requests: Array<{ position?: number; url?: string; query?: string }> = [];
+  skips = 0;
+
+  get session() {
+    return {
+      isActive: this.isActive,
+      current: null,
+      toPlayerState: () => ({ status: 'idle', queue: [] }),
+    };
+  }
+
+  isPlaylistUrl(): boolean {
+    return false;
+  }
+
+  async request(input: { position?: number; url?: string; query?: string }) {
+    this.requests.push(input);
+    return {
+      ok: true as const,
+      value: { title: 'A Track', url: input.url ?? 'https://youtu.be/x', durationSec: 100 },
+    };
+  }
+
+  async skip() {
+    this.skips += 1;
+    return { ok: true as const, value: undefined };
+  }
+}
+
+function build(
+  options: {
+    playlists?: Partial<PlaylistService>;
+    allowed?: Set<string>;
+    playback?: FakePlayback;
+  } = {},
+) {
   const registry = new CommandRegistry();
+  const playback = options.playback ?? new FakePlayback();
   const deps: MusicCommandDependencies = {
-    playback: {} as PlaybackService,
+    playback: playback as unknown as PlaybackService,
     bot: {} as BotClient,
     pendingSearches: new PendingSearches(clock),
     clock,
@@ -57,8 +96,72 @@ function build(options: { playlists?: Partial<PlaylistService>; allowed?: Set<st
     return (await definition.handler(parsed)).text;
   };
 
-  return { run };
+  return { run, playback };
 }
+
+describe('!play and !add', () => {
+  it('puts !play at the front and cuts the current track short', async () => {
+    // What people mean by "play this" is that they hear it now, not eventually.
+    const playback = new FakePlayback();
+    playback.isActive = true;
+    const { run } = build({ playback });
+
+    const answer = await run('play https://youtu.be/x');
+
+    assert.equal(playback.requests[0]?.position, 0);
+    assert.equal(playback.skips, 1);
+    assert.match(answer, /Playing now/);
+  });
+
+  it('does not skip when nothing is playing', async () => {
+    // The queue starts the track itself when the bot is idle, so a skip here would skip the
+    // very track somebody just asked for.
+    const playback = new FakePlayback();
+    const { run } = build({ playback });
+
+    const answer = await run('play https://youtu.be/x');
+
+    assert.equal(playback.skips, 0);
+    assert.match(answer, /Playing now/);
+  });
+
+  it('puts !add at the end and leaves the current track alone', async () => {
+    const playback = new FakePlayback();
+    playback.isActive = true;
+    const { run } = build({ playback });
+
+    const answer = await run('add https://youtu.be/x');
+
+    assert.equal(playback.requests[0]?.position, undefined);
+    assert.equal(playback.skips, 0);
+    assert.match(answer, /Queued/);
+  });
+
+  it('says an added track is playing when the bot was idle', async () => {
+    const playback = new FakePlayback();
+    const { run } = build({ playback });
+
+    assert.match(await run('add https://youtu.be/x'), /Playing now/);
+  });
+
+  it('leaves !playnext queueing at the front without interrupting', async () => {
+    const playback = new FakePlayback();
+    playback.isActive = true;
+    const { run } = build({ playback });
+
+    await run('playnext https://youtu.be/x');
+
+    assert.equal(playback.requests[0]?.position, 0);
+    assert.equal(playback.skips, 0);
+  });
+
+  it('asks what to play when given nothing', async () => {
+    const { run, playback } = build();
+
+    assert.match(await run('play'), /What should I play/);
+    assert.equal(playback.requests.length, 0);
+  });
+});
 
 describe('!help', () => {
   it('lists the allowed commands and nothing else', async () => {

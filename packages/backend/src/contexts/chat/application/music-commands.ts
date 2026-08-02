@@ -62,9 +62,19 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
       aliases: ['p'],
       defaultRole: 'user',
       usage: '!play <url | search terms>',
-      summary: 'Queue a track, by link or by name',
+      summary: 'Play a track now, interrupting whatever is playing',
       cooldownMs: RESOLVING_COOLDOWN_MS,
-      handler: (context) => enqueue(deps, context, undefined),
+      handler: (context) => enqueue(deps, context, { position: 0, interrupt: true }),
+    }),
+
+    defineCommand({
+      name: 'add',
+      aliases: ['a'],
+      defaultRole: 'user',
+      usage: '!add <url | search terms>',
+      summary: 'Add a track to the end of the queue',
+      cooldownMs: RESOLVING_COOLDOWN_MS,
+      handler: (context) => enqueue(deps, context, {}),
     }),
 
     defineCommand({
@@ -74,7 +84,7 @@ export function createMusicCommands(deps: MusicCommandDependencies): readonly Co
       usage: '!playnext <url | search terms>',
       summary: 'Queue a track at the front',
       cooldownMs: RESOLVING_COOLDOWN_MS,
-      handler: (context) => enqueue(deps, context, 0),
+      handler: (context) => enqueue(deps, context, { position: 0 }),
     }),
 
     defineCommand({
@@ -535,10 +545,23 @@ const PLAYLIST_PREVIEW_COUNT = 10;
 /** How many playlist entries one request may add, regardless of the playlist's length. */
 const PLAYLIST_IMPORT_LIMIT = 100;
 
+/**
+ * How a request joins the queue.
+ *
+ * `!play` and `!add` differ only in this, so they share one path rather than two that would
+ * drift: both resolve the same way, refuse the same things and answer with the same wording.
+ */
+interface EnqueueMode {
+  /** Where in the queue it lands; the end when absent. */
+  readonly position?: number;
+  /** Whether to cut short whatever is playing so this starts immediately. */
+  readonly interrupt?: boolean;
+}
+
 async function enqueue(
   deps: MusicCommandDependencies,
   context: CommandContext,
-  position: number | undefined,
+  mode: EnqueueMode,
 ) {
   const input = context.command.argumentText;
   if (input.length === 0) return reply('What should I play?');
@@ -570,13 +593,7 @@ async function enqueue(
   }
 
   const request = looksLikeUrl(input) ? { url: input } : { query: input };
-  const queued = await deps.playback.request(
-    position === undefined ? request : { ...request, position },
-    { uid: context.invoker.uid, nickname: context.invoker.nickname },
-  );
-
-  if (!queued.ok) return reply(describeRequestFailure(queued.error));
-  return reply(`Queued: ${formatTrack(queued.value)}`);
+  return await submit(deps, context, request, mode);
 }
 
 async function enqueueTrack(
@@ -585,14 +602,47 @@ async function enqueueTrack(
   track: Track,
   position: number | undefined,
 ) {
-  const request = { url: track.url };
+  return await submit(
+    deps,
+    context,
+    { url: track.url },
+    position === undefined ? {} : { position },
+  );
+}
+
+/**
+ * Queues one resolved request and, for `!play`, cuts the current track short so it starts
+ * straight away.
+ *
+ * Whether something was playing is read *before* queueing, not after: with an idle bot the
+ * queue itself starts the new track, and a skip issued afterwards would skip the very track
+ * somebody just asked for.
+ */
+async function submit(
+  deps: MusicCommandDependencies,
+  context: CommandContext,
+  request: { url: string } | { query: string },
+  mode: EnqueueMode,
+) {
+  const wasPlaying = deps.playback.session.isActive;
+
   const queued = await deps.playback.request(
-    position === undefined ? request : { ...request, position },
+    mode.position === undefined ? request : { ...request, position: mode.position },
     { uid: context.invoker.uid, nickname: context.invoker.nickname },
   );
 
   if (!queued.ok) return reply(describeRequestFailure(queued.error));
-  return reply(`Queued: ${formatTrack(queued.value)}`);
+
+  if (mode.interrupt === true && wasPlaying) {
+    await deps.playback.skip();
+    return reply(`Playing now: ${formatTrack(queued.value)}`);
+  }
+
+  return reply(
+    wasPlaying
+      ? `Queued: ${formatTrack(queued.value)}`
+      : `Playing now: ${formatTrack(queued.value)}`,
+  );
 }
 
 /**

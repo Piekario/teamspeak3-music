@@ -32,6 +32,7 @@ export function highestRole(roles: readonly Role[]): Role | undefined {
 
 export const COMMAND_NAMES = [
   'play',
+  'add',
   'search',
   'pick',
   'playnext',
@@ -66,6 +67,7 @@ export type CommandName = (typeof COMMAND_NAMES)[number];
  */
 export const DEFAULT_COMMAND_ROLES: Readonly<Record<CommandName, Role>> = Object.freeze({
   play: 'user',
+  add: 'user',
   search: 'user',
   pick: 'user',
   playnext: 'dj',
