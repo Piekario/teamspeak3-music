@@ -121,6 +121,37 @@ Bots are fully independent — separate identity, sink, queue and ClientQuery so
 entries may point at completely unrelated TeamSpeak servers. Budget roughly 300–500 MB of RAM
 per bot: each one is a full emulated Qt application.
 
+## Publishing the panel through a Cloudflare tunnel
+
+The panel is served by the `web` container, which also proxies `/api` and `/ws` to the bot —
+so a tunnel needs exactly one target and the browser stays on a single origin.
+
+`cloudflared` dials out to Cloudflare and traffic returns down that connection. Nothing
+listens on the public internet here and the router needs no port forwarding, which is the
+point: the machine stays as closed as it was before.
+
+1. In the Cloudflare Zero Trust dashboard: **Networks → Tunnels → Create a tunnel →
+   Cloudflared**. Name it, and copy the token from the install command it shows.
+2. On the tunnel's **Public Hostname** tab, add the hostname you want (`bot.example.com`),
+   service type **HTTP**, URL **`web:80`**. That name is the container's, resolved on the
+   compose network — not a hostname of this machine.
+3. Put the token in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`, then:
+
+```
+docker compose --profile tunnel up -d
+```
+
+The service sits behind a compose profile, so the stack runs unchanged when you are not
+using it.
+
+**Put Cloudflare Access in front of it.** The panel's only defence is `ADMIN_TOKEN` in a
+bearer header, and that token is not a login: it does not expire, it is the same for every
+person, there is no lockout after a wrong guess and no record of who used it. On a LAN that
+is a reasonable trade; on a public hostname it is the only thing between the internet and a
+bot that can be made to join servers and play audio. Access adds an identity check in front
+of the tunnel — Zero Trust → Access → Applications, self-hosted, one email policy is enough
+— and costs nothing at this scale.
+
 ## Development
 
 ```bash

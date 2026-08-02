@@ -97,6 +97,28 @@ services:
     networks:
       - tsmusic
 
+  # Publishes the panel without opening a port on this machine: cloudflared dials out to
+  # Cloudflare and traffic comes back down that connection. Nothing listens on the public
+  # internet here, and the router needs no forwarding rule.
+  #
+  # Inert until CLOUDFLARE_TUNNEL_TOKEN is set, so the stack runs unchanged without it.
+  # The token identifies one tunnel and carries its credentials — treat it as a secret.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tsmusic-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      # Not declared as required: compose interpolates every service whether or not its
+      # profile is active, so demanding the token here would break `up` for everyone who
+      # does not use the tunnel at all.
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
+    depends_on:
+      - web
+    networks:
+      - tsmusic
+
 volumes:
   bot-data: {}
   ytdlp: {}
