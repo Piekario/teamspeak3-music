@@ -14,7 +14,7 @@ interface TokenGateProps {
 }
 
 /**
- * Collects a token and trades it for a session.
+ * Collects an access token and trades it for a session.
  *
  * The token is verified by the exchange itself, so a typo fails here with a clear message
  * instead of leaving the panel in a state where every later action silently 401s. What comes
@@ -70,25 +70,28 @@ export function TokenGate({ theme, onAuthenticated }: TokenGateProps) {
               </span>
               <div>
                 <h1 className="font-semibold leading-tight">TeamSpeak Music</h1>
-                <p className="text-xs text-muted-foreground">Operator sign-in</p>
+                <p className="text-xs text-muted-foreground">Sign in</p>
               </div>
             </div>
 
-            <label htmlFor="operator-token" className="text-sm font-medium leading-none">
-              Token
+            <label htmlFor="access-token" className="text-sm font-medium leading-none">
+              Your access token
             </label>
             <Input
-              id="operator-token"
+              id="access-token"
               type="password"
               value={token}
               onChange={(event) => setToken(event.target.value)}
-              placeholder="ADMIN_TOKEN"
+              placeholder="Paste the token you were given"
               autoComplete="current-password"
               className="mt-1.5"
             />
+            {/* Names no environment variable on purpose. Almost everybody signing in here was
+                handed a personal token by whoever runs the panel; pointing them at .env sent
+                them looking for a file they have no reason to be able to read. */}
             <p className="mt-1.5 text-xs text-muted-foreground">
-              From <code className="font-mono">ADMIN_TOKEN</code> in your{' '}
-              <code className="font-mono">.env</code>.
+              Whoever runs this panel issues one for you. Sign in once and this browser will
+              remember you.
             </p>
 
             {error !== null && (
