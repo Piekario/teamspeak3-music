@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { AddTrackBar } from '../components/AddTrackBar.tsx';
 import { CommandLog } from '../components/CommandLog.tsx';
 import { NowPlaying } from '../components/NowPlaying.tsx';
+import { useCan } from '../hooks/use-identity.ts';
 import { QueueList } from '../components/QueueList.tsx';
 import { TransportControls } from '../components/TransportControls.tsx';
 import { ApiError, api } from '../lib/api.ts';
@@ -30,6 +31,11 @@ export function DashboardPage({ instanceId }: DashboardPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   const disabled = live.connection !== 'connected';
+  // Two different reasons a control is unavailable, kept apart: the bot being offline is
+  // temporary and worth explaining, while a role that does not reach a control is permanent
+  // and better not shown at all.
+  const isDj = useCan('dj');
+  const djDisabled = disabled || !isDj;
 
   /** Every mutation reports failure the same way, using the backend's own wording. */
   const run = <TArgs extends unknown[]>(action: (...args: TArgs) => Promise<unknown>) =>
@@ -105,13 +111,13 @@ export function DashboardPage({ instanceId }: DashboardPageProps) {
 
       <NowPlaying
         player={live.player}
-        disabled={disabled}
+        disabled={djDisabled}
         onSeek={run((positionSec: number) => api.seek(instanceId, positionSec))}
       />
 
       <TransportControls
         player={live.player}
-        disabled={disabled}
+        disabled={djDisabled}
         onPause={run(() => api.pause(instanceId))}
         onResume={run(() => api.resume(instanceId))}
         onSkip={run(() => api.skip(instanceId))}
@@ -129,6 +135,7 @@ export function DashboardPage({ instanceId }: DashboardPageProps) {
             onMove={run((itemId: string, toIndex: number) =>
               api.moveInQueue(instanceId, itemId, toIndex),
             )}
+            canEditQueue={isDj}
             onShuffle={run(() => api.shuffleQueue(instanceId))}
             onClear={run(() => api.clearQueue(instanceId))}
           />

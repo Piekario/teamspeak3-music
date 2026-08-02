@@ -8,6 +8,7 @@ import { ThemeToggle } from './components/ThemeToggle.tsx';
 import { Button } from './components/ui/button.tsx';
 import { Card } from './components/ui/card.tsx';
 import { cn } from './lib/utils.ts';
+import { useCan, useIdentity } from './hooks/use-identity.ts';
 import { useLiveSocket } from './hooks/use-live-socket.ts';
 import { useTheme } from './hooks/use-theme.ts';
 import {
@@ -22,6 +23,8 @@ import { DashboardPage } from './pages/DashboardPage.tsx';
 import { PlaylistsPage } from './pages/PlaylistsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TokenGate } from './pages/TokenGate.tsx';
+
+const TABS = ['player', 'playlists', 'settings'] as const;
 
 const TAB_ICONS = {
   player: <Music2 className="size-3.5" />,
@@ -61,6 +64,8 @@ function Shell({ theme, onSignOut }: ShellProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => readSelectedInstance());
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState<'player' | 'playlists' | 'settings'>('player');
+  const identity = useIdentity();
+  const isOwner = useCan('owner');
   const [addError, setAddError] = useState<string | null>(null);
 
   const instances = useQuery({
@@ -132,14 +137,26 @@ function Shell({ theme, onSignOut }: ShellProps) {
             selectedId={selectedId}
             connectionOf={(id) => byInstance[id]?.connection ?? 'disconnected'}
             onSelect={setSelectedId}
-            onAdd={() => {
-              setAddError(null);
-              setAddOpen(true);
-            }}
+            onAdd={
+              isOwner
+                ? () => {
+                    setAddError(null);
+                    setAddOpen(true);
+                  }
+                : undefined
+            }
           />
         </div>
 
         <div className="space-y-2 border-t p-3">
+          {/* Who you are signed in as, because several people now share this panel and the
+              answer decides which controls are missing. */}
+          {identity !== undefined && (
+            <p className="truncate px-2 text-xs text-muted-foreground" title={identity.label}>
+              {identity.label} · {identity.role}
+            </p>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
               <span
@@ -190,11 +207,15 @@ function Shell({ theme, onSignOut }: ShellProps) {
               </div>
               <h2 className="mt-4 text-lg font-semibold">No bots yet</h2>
               <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-                Add one and it will join your TeamSpeak server straight away.
+                {isOwner
+                  ? 'Add one and it will join your TeamSpeak server straight away.'
+                  : 'Nothing has been shared with you yet — ask whoever runs the panel.'}
               </p>
-              <Button className="mx-auto mt-5" onClick={() => setAddOpen(true)}>
-                <Plus /> Add a bot
-              </Button>
+              {isOwner && (
+                <Button className="mx-auto mt-5" onClick={() => setAddOpen(true)}>
+                  <Plus /> Add a bot
+                </Button>
+              )}
             </Card>
           )}
 
@@ -213,7 +234,7 @@ function Shell({ theme, onSignOut }: ShellProps) {
                 </div>
 
                 <div className="flex shrink-0 rounded-md border bg-muted/50 p-0.5">
-                  {(['player', 'playlists', 'settings'] as const).map((value) => (
+                  {TABS.filter((value) => value !== 'settings' || isOwner).map((value) => (
                     <button
                       key={value}
                       type="button"
@@ -235,7 +256,7 @@ function Shell({ theme, onSignOut }: ShellProps) {
 
               {tab === 'player' && <DashboardPage instanceId={selectedId} />}
               {tab === 'playlists' && <PlaylistsPage instanceId={selectedId} />}
-              {tab === 'settings' && (
+              {tab === 'settings' && isOwner && (
                 <SettingsPage
                   instanceId={selectedId}
                   onDeleted={() => {

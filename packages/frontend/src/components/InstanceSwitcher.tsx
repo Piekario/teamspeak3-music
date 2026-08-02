@@ -10,7 +10,8 @@ interface InstanceSwitcherProps {
   readonly selectedId: string | null;
   readonly connectionOf: (instanceId: string) => ConnectionState;
   readonly onSelect: (instanceId: string) => void;
-  readonly onAdd: () => void;
+  /** Absent for anyone who may not create bots, so the control is not offered at all. */
+  readonly onAdd?: (() => void) | undefined;
 }
 
 const CONNECTION: Readonly<Record<ConnectionState, { dot: string; label: string }>> = {
@@ -37,10 +38,12 @@ export function InstanceSwitcher({
         <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Bots
         </h2>
-        <Button variant="ghost" size="icon" className="size-7" onClick={onAdd} title="Add a bot">
-          <Plus />
-          <span className="sr-only">Add a bot</span>
-        </Button>
+        {onAdd !== undefined && (
+          <Button variant="ghost" size="icon" className="size-7" onClick={onAdd} title="Add a bot">
+            <Plus />
+            <span className="sr-only">Add a bot</span>
+          </Button>
+        )}
       </div>
 
       {instances.length === 0 ? (

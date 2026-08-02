@@ -68,6 +68,18 @@ function ensureSchema(connection: Database.Database): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS panel_tokens (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      role TEXT NOT NULL,
+      instance_id TEXT REFERENCES instances(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS panel_tokens_hash ON panel_tokens (token_hash);
+
     CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY,
       instance_id TEXT NOT NULL REFERENCES instances(id) ON DELETE CASCADE,

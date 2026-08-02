@@ -16,6 +16,7 @@ import { Badge } from '../components/ui/badge.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.tsx';
 import { Input } from '../components/ui/input.tsx';
+import { useCan } from '../hooks/use-identity.ts';
 import { ApiError, api, type PlaylistSummary } from '../lib/api.ts';
 import { formatDuration } from '../lib/format.ts';
 import { cn } from '../lib/utils.ts';
@@ -37,6 +38,9 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
   const [newName, setNewName] = useState('');
   const [trackUrl, setTrackUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Queueing a saved playlist is queueing; building and deleting them is editing, and the
+  // difference is exactly the one the chat commands already draw.
+  const canEdit = useCan('dj');
 
   const playlists = useQuery({
     queryKey: ['playlists', instanceId],
@@ -97,6 +101,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
     await api.removeFromPlaylist(instanceId, selected.id, trackId);
   });
 
+  const readOnly = !canEdit;
   const busy =
     create.isPending ||
     saveQueue.isPending ||
@@ -113,6 +118,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
         </p>
       )}
 
+      {canEdit && (
       <Card>
         <CardHeader>
           <CardTitle>New playlist</CardTitle>
@@ -144,6 +150,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
           </Button>
         </CardContent>
       </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <Card className="overflow-hidden">
@@ -157,8 +164,15 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
             <p className="px-5 py-10 text-center text-sm text-muted-foreground">Loading…</p>
           ) : all.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-muted-foreground">
-              Nothing saved yet. Name one above, or use{' '}
-              <code className="font-mono text-xs">!playlist save</code> in TeamSpeak.
+              Nothing saved yet.{' '}
+              {canEdit ? (
+                <>
+                  Name one above, or use{' '}
+                  <code className="font-mono text-xs">!playlist save</code> in TeamSpeak.
+                </>
+              ) : (
+                'A DJ can save one from the queue.'
+              )}
             </p>
           ) : (
             <ul className="divide-y">
@@ -211,7 +225,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     onClick={() => makeDefault.mutate(undefined)}
                     title="Plays automatically when the queue runs out"
                   >
@@ -221,7 +235,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
+                    disabled={busy || readOnly}
                     className="hover:text-destructive"
                     onClick={() => remove.mutate(undefined)}
                   >
@@ -230,6 +244,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
                 </div>
               </header>
 
+              {canEdit && (
               <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3">
                 <Input
                   value={trackUrl}
@@ -252,6 +267,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
                   Add
                 </Button>
               </div>
+              )}
 
               {detail.data === undefined ? (
                 <p className="px-5 py-10 text-center text-sm text-muted-foreground">Loading…</p>
@@ -281,7 +297,7 @@ export function PlaylistsPage({ instanceId }: PlaylistsPageProps) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={busy}
+                        disabled={busy || readOnly}
                         onClick={() => removeTrack.mutate(item.id)}
                         aria-label={`Remove ${item.track.title}`}
                         className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"

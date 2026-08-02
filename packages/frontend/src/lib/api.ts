@@ -161,8 +161,41 @@ export interface PlaylistDetail extends PlaylistSummary {
   tracks: PlaylistTrack[];
 }
 
+export interface PanelIdentity {
+  label: string;
+  role: Role;
+  /** Null means every bot; otherwise the only one this credential may touch. */
+  instanceId: string | null;
+  isRootToken: boolean;
+}
+
+export interface PanelToken {
+  id: string;
+  label: string;
+  role: Role;
+  instanceId: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 export const api = {
   health: () => request<{ status: string; at: string }>('/api/health'),
+
+  /** Who this token belongs to, and what it may do. */
+  me: () => request<PanelIdentity>('/api/me'),
+
+  listPanelTokens: () => request<{ tokens: PanelToken[] }>('/api/panel-tokens'),
+
+  createPanelToken: (body: { label: string; role: Role; instanceId: string | null }) =>
+    // The token comes back exactly once: only its hash is stored, so nothing can show it
+    // again. The caller has to put it in front of somebody there and then.
+    request<PanelToken & { token: string }>('/api/panel-tokens', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deletePanelToken: (tokenId: string) =>
+    request<void>(`/api/panel-tokens/${encodeURIComponent(tokenId)}`, { method: 'DELETE' }),
 
   listInstances: () => request<{ instances: InstanceSummary[] }>('/api/instances'),
 

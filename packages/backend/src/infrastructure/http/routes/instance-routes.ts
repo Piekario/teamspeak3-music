@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 
 import type { InstanceManager } from '../../../contexts/instances/application/instance-manager.ts';
 import { httpError } from '../errors.ts';
+import { identityOf } from '../guards.ts';
 
 /**
  * Instance routes: what bots exist, what each is connected to, and where it sits.
@@ -18,7 +19,14 @@ export function registerInstanceRoutes(app: FastifyInstance, instances: Instance
     return found.value;
   };
 
-  app.get('/api/instances', async () => ({ instances: instances.summaries() }));
+  app.get('/api/instances', async (request) => {
+    // A credential confined to one bot sees one bot. Returning the whole list and relying on
+    // the per-request scope check would still tell that person every bot's name and server.
+    const scope = identityOf(request).instanceId;
+    const all = instances.summaries();
+
+    return { instances: scope === null ? all : all.filter((item) => item.id === scope) };
+  });
 
   app.get('/api/instances/:instanceId', async (request) => {
     const { instanceId } = instanceIdParamSchema.parse(request.params);

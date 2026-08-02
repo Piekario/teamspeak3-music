@@ -1,5 +1,6 @@
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import { roleSatisfies } from '@tsmusic/shared';
 import { ZodError } from 'zod';
 
 import type { InstanceManager } from '../../contexts/instances/application/instance-manager.ts';
@@ -9,6 +10,13 @@ import type { Logger, ScopedLogger } from '../logging/logger.ts';
 import { extractToken, tokenMatches } from './auth.ts';
 import { HttpError, toErrorResponse } from './errors.ts';
 import type { InstanceRepository } from '../../contexts/instances/domain/instance-repository.ts';
+import {
+  mayTouchInstance,
+  type PanelIdentity,
+  type PanelTokenRepository,
+} from '../../contexts/access/domain/panel-access.ts';
+import { registerPanelTokenRoutes } from './routes/panel-token-routes.ts';
+import { instanceOf, requiredRoleFor } from './guards.ts';
 import { registerInstanceAdminRoutes } from './routes/instance-admin-routes.ts';
 import { registerInstanceRoutes } from './routes/instance-routes.ts';
 import { registerPlayerRoutes } from './routes/player-routes.ts';
@@ -25,6 +33,11 @@ export interface HttpServerOptions {
    * file, so the panel cannot offer to create bots that would vanish on the next restart.
    */
   readonly instanceRepository?: InstanceRepository | undefined;
+  /**
+   * Per-person panel credentials. Absent means only the environment's operator token is
+   * accepted, which is the single-operator setup this started as.
+   */
+  readonly panelTokens?: PanelTokenRepository | undefined;
   readonly events: EventSubscriber;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -36,6 +49,34 @@ export interface HttpServer {
   readonly hub: WebSocketHub;
   listen(): Promise<string>;
   close(): Promise<void>;
+}
+
+/**
+ * Turns a presented token into who is holding it.
+ *
+ * The environment's operator token is tried first and never touches the database: it is the
+ * bootstrap credential, so it has to work before any other has been issued and must keep
+ * working if every one of them is revoked.
+ */
+async function resolveIdentity(
+  token: string | undefined,
+  options: HttpServerOptions,
+): Promise<PanelIdentity | undefined> {
+  if (tokenMatches(token, options.adminToken)) {
+    return { label: 'operator', role: 'owner', instanceId: null, isRootToken: true };
+  }
+
+  if (token === undefined || options.panelTokens === undefined) return undefined;
+
+  const found = await options.panelTokens.findByToken(token);
+  if (found === undefined || found.role === 'blocked') return undefined;
+
+  return {
+    label: found.label,
+    role: found.role,
+    instanceId: found.instanceId,
+    isRootToken: false,
+  };
 }
 
 export async function createHttpServer(options: HttpServerOptions): Promise<HttpServer> {
@@ -61,10 +102,35 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
     const query = request.query as { token?: string } | undefined;
     const token = extractToken(request.headers.authorization, query?.token);
-    if (!tokenMatches(token, options.adminToken)) {
+    const identity = await resolveIdentity(token, options);
+
+    if (identity === undefined) {
       await reply.status(401).send({ error: { message: 'unauthorized' } });
+      return;
+    }
+
+    request.identity = identity;
+
+    // Authorisation in the same place as authentication, from one table, so a route cannot
+    // be reachable without somebody having decided who may reach it.
+    const path = request.url.split('?')[0] ?? '';
+    const required = requiredRoleFor(request.method, path);
+    if (!roleSatisfies(identity.role, required)) {
+      await reply.status(403).send({ error: { message: `this needs the ${required} role` } });
+      return;
+    }
+
+    // A credential scoped to one bot is told the others do not exist, rather than that it
+    // may not touch them: a 403 would confirm which instance ids are real.
+    const instanceId = instanceOf(path);
+    if (instanceId !== undefined && !mayTouchInstance(identity, instanceId)) {
+      await reply.status(404).send({ error: { message: `no instance '${instanceId}'` } });
     }
   });
+
+  if (options.panelTokens !== undefined) {
+    registerPanelTokenRoutes(app, options.panelTokens, options.instances);
+  }
 
   registerInstanceRoutes(app, options.instances);
   registerPlayerRoutes(app, options.instances);

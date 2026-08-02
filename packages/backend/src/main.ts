@@ -2,6 +2,7 @@ import { InstanceManager } from './contexts/instances/application/instance-manag
 import { openDatabase } from './infrastructure/persistence/database.ts';
 import { DrizzleInstanceRepository } from './infrastructure/persistence/drizzle-instance-repository.ts';
 import { DrizzlePlaylistRepository } from './infrastructure/persistence/drizzle-playlist-repository.ts';
+import { DrizzlePanelTokenRepository } from './infrastructure/persistence/drizzle-panel-token-repository.ts';
 import { GatewayConnection } from './contexts/instances/infrastructure/gateway/gateway-connection.ts';
 import { buildTransport } from './composition/create-transport.ts';
 import { YtDlpResolver } from './contexts/playback/infrastructure/ytdlp-resolver.ts';
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
     scopedLogger(logger, { component: 'db' }),
   );
   const playlistRepository = new DrizzlePlaylistRepository(db);
+  const panelTokenRepository = new DrizzlePanelTokenRepository(db);
 
   /**
    * Identities are cached in memory and written through to storage.
@@ -169,6 +171,7 @@ async function main(): Promise<void> {
     adminToken: config.ADMIN_TOKEN,
     instances,
     instanceRepository,
+    panelTokens: panelTokenRepository,
     events,
     clock: systemClock,
     logger,

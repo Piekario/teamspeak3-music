@@ -9,6 +9,34 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
  * is content, not a server, so it is shared and any bot can load it.
  */
 
+/**
+ * Panel access, one row per person.
+ *
+ * A shared operator token cannot express "this person may queue but not delete a bot", and
+ * revoking it revokes everybody. A row each means a role each, a revocation each, and a
+ * record of who last used what.
+ *
+ * Only the hash is stored. A token is a password in every way that matters, and a panel
+ * database that leaks should not hand over working credentials along with it.
+ */
+export const panelTokens = sqliteTable(
+  'panel_tokens',
+  {
+    id: text('id').primaryKey(),
+    /** Who this is for. Free text, because it is for the operator's eyes only. */
+    label: text('label').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    role: text('role').notNull(),
+    /** Null means every bot; otherwise the one instance this token may touch. */
+    instanceId: text('instance_id').references(() => instances.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull(),
+    lastUsedAt: text('last_used_at'),
+  },
+  (table) => ({
+    byHash: uniqueIndex('panel_tokens_hash').on(table.tokenHash),
+  }),
+);
+
 export const instances = sqliteTable('instances', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),

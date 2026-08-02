@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plug, PlugZap, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { PanelAccessCard } from '../components/PanelAccessCard.tsx';
 import { Badge } from '../components/ui/badge.tsx';
 import { Button } from '../components/ui/button.tsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card.tsx';
@@ -99,6 +100,10 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
   const queryClient = useQueryClient();
   const live = useLiveStore(selectInstance(instanceId));
   const connected = live.connection === 'connected';
+
+  // Shared with the sidebar's copy through the query cache, so opening settings issues no
+  // extra request.
+  const instances = useQuery({ queryKey: ['instances'], queryFn: () => api.listInstances() });
 
   const detail = useQuery({
     queryKey: ['instance', instanceId],
@@ -511,6 +516,8 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
           </div>
         </CardContent>
       </Card>
+
+      <PanelAccessCard instances={instances.data?.instances ?? []} />
 
       <div className="flex items-center gap-3">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>

@@ -8,6 +8,8 @@ import { Card } from './ui/card.tsx';
 interface QueueListProps {
   readonly queue: readonly QueueItem[];
   readonly disabled: boolean;
+  /** Shuffling and clearing touch everybody's tracks, so they are a DJ's to reach. */
+  readonly canEditQueue: boolean;
   readonly onRemove: (itemId: string) => void;
   readonly onMove: (itemId: string, toIndex: number) => void;
   readonly onShuffle: () => void;
@@ -17,6 +19,7 @@ interface QueueListProps {
 export function QueueList({
   queue,
   disabled,
+  canEditQueue,
   onRemove,
   onMove,
   onShuffle,
@@ -44,7 +47,7 @@ export function QueueList({
             variant="ghost"
             size="sm"
             onClick={onShuffle}
-            disabled={disabled || queue.length < 2}
+            disabled={disabled || !canEditQueue || queue.length < 2}
           >
             <Shuffle /> Shuffle
           </Button>
@@ -52,7 +55,7 @@ export function QueueList({
             variant="ghost"
             size="sm"
             onClick={onClear}
-            disabled={disabled || queue.length === 0}
+            disabled={disabled || !canEditQueue || queue.length === 0}
           >
             <Trash2 /> Clear
           </Button>

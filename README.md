@@ -144,13 +144,44 @@ docker compose --profile tunnel up -d
 The service sits behind a compose profile, so the stack runs unchanged when you are not
 using it.
 
-**Put Cloudflare Access in front of it.** The panel's only defence is `ADMIN_TOKEN` in a
-bearer header, and that token is not a login: it does not expire, it is the same for every
-person, there is no lockout after a wrong guess and no record of who used it. On a LAN that
-is a reasonable trade; on a public hostname it is the only thing between the internet and a
-bot that can be made to join servers and play audio. Access adds an identity check in front
-of the tunnel — Zero Trust → Access → Applications, self-hosted, one email policy is enough
-— and costs nothing at this scale.
+Consider putting Cloudflare Access in front as well. Panel access below is per person and
+role-bound, which is the substantive control; Access adds an identity check *before* a
+request ever reaches the panel, and gives you a record of who opened it. Zero Trust → Access
+→ Applications, self-hosted, one email policy is enough, and it costs nothing at this scale.
+
+## Panel access
+
+`ADMIN_TOKEN` is the operator credential. It comes from the environment, it is always an
+owner, it is never listed in the UI and it cannot be revoked from the panel — that is what
+makes it the way back in when everything else has been revoked. It is not meant to be
+handed to anybody else.
+
+Everyone else gets their own token, issued from **Settings → Panel access**, with a role and
+optionally a single bot:
+
+| Role | May |
+|---|---|
+| `user` | queue tracks, load playlists, watch the queue |
+| `dj` | all of the above, plus skip, pause, stop, seek, volume, shuffle, clear, and edit playlists |
+| `owner` | all of the above, plus bot settings, creating and deleting bots, and issuing access |
+
+They are the same four roles the chat commands use, applied to the same actions: `!skip` is a
+DJ command, so the skip button is a DJ button. One permission model, not two that drift apart
+the first time somebody is promoted in one and forgotten in the other.
+
+Two details worth knowing:
+
+- **A token is shown once.** Only its hash is stored, so nothing in the panel or the database
+  can produce it again. Lost means reissued, not recovered.
+- **A token scoped to one bot is told the others do not exist.** It sees one bot in the list,
+  and a request aimed at another gets a 404 rather than a 403 — a 403 would confirm which ids
+  are real.
+
+Routes that nobody has written a policy rule for require `owner`. That is deliberate: a new
+endpoint is unreachable until somebody decides who may reach it, which is annoying for
+whoever adds it and much better than an endpoint that is quietly open to everyone.
+
+## Development
 
 ## Development
 
