@@ -22,8 +22,9 @@ SOFTWARE.
 
 ---
 
-This MIT license covers this repository's own code. `services/ts3-gateway` compiles directly
-against `vendor/TS3AudioBot/TSLib` (a git submodule), which is licensed under the Open
-Software License v3.0 — see `vendor/TS3AudioBot/LICENSE`. The built gateway is therefore a
-combined work incorporating OSL-3.0-licensed source, and distributing or deploying it is
-subject to that license's terms, not just this one.
+This MIT license covers this repository's own code, with one exception: `services/ts3-gateway`
+compiles directly against `vendor/TS3AudioBot/TSLib` (a git submodule), which is licensed under
+the Open Software License v3.0. The built gateway is therefore a combined work incorporating
+OSL-3.0-licensed source, and is licensed under OSL-3.0 instead of MIT — see
+`services/ts3-gateway/LICENSE` for the license that actually governs that component, and
+`vendor/TS3AudioBot/LICENSE` for the original TSLib license text.
