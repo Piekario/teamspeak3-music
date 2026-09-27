@@ -50,8 +50,11 @@ services:
       # Defaults to /dev/null so the mount is valid when no file was configured; the
       # environment variable above is what decides whether yt-dlp is told about it.
       - ${YTDLP_COOKIES_FILE:-/dev/null}:/config/cookies.txt:ro
-    ports:
-      - "8080:8080"
+    # Not published to the host: web's nginx proxies /api and /ws to this container over the
+    # compose network, so the panel needs no direct route to it. docker-compose.dev.yml
+    # publishes it for local development instead.
+    expose:
+      - "8080"
     networks:
       - tsmusic
 

@@ -2,8 +2,9 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #
-# Adds a local TeamSpeak server to develop against, and opens the ports that production
-# deliberately keeps closed.
+# Adds a local TeamSpeak server to develop against, and publishes the bot's port directly
+# (production leaves it internal-only — nginx reaches it over the compose network) so you
+# can hit the API straight from the host while working on it.
 
 services:
   # A throwaway TeamSpeak server so development needs nobody else's. Also amd64-only, but
