@@ -3,6 +3,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { roleSatisfies } from '@tsmusic/shared';
 import { ZodError, z } from 'zod';
 
+import { CooldownTracker } from '../../contexts/chat/application/cooldown-tracker.ts';
 import type { InstanceManager } from '../../contexts/instances/application/instance-manager.ts';
 import type { Clock } from '../../shared-kernel/clock.ts';
 import type { EventSubscriber } from '../../shared-kernel/event-bus.ts';
@@ -180,9 +181,13 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
     registerPanelTokenRoutes(app, options.panelTokens, options.instances);
   }
 
+  // Shared across every credential rather than one per instance: the resource being paced
+  // (yt-dlp/ffmpeg processes) is the whole host's, not any one bot's.
+  const httpCooldowns = new CooldownTracker(options.clock);
+
   registerInstanceRoutes(app, options.instances);
-  registerPlayerRoutes(app, options.instances);
-  registerPlaylistRoutes(app, options.instances);
+  registerPlayerRoutes(app, options.instances, httpCooldowns);
+  registerPlaylistRoutes(app, options.instances, httpCooldowns);
   if (options.instanceRepository !== undefined) {
     registerInstanceAdminRoutes(app, {
       instances: options.instances,

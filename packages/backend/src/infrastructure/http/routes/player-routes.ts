@@ -10,10 +10,11 @@ import {
 } from '@tsmusic/shared';
 import type { FastifyInstance } from 'fastify';
 
+import type { CooldownTracker } from '../../../contexts/chat/application/cooldown-tracker.ts';
 import type { InstanceManager } from '../../../contexts/instances/application/instance-manager.ts';
 import { Volume } from '../../../contexts/playback/domain/values.ts';
 import { httpError } from '../errors.ts';
-import { identityOf } from '../guards.ts';
+import { identityOf, requireCooldown } from '../guards.ts';
 
 /**
  * Playback routes.
@@ -23,7 +24,11 @@ import { identityOf } from '../guards.ts';
  * looks like it belongs here — queue limits, legal transitions, volume bounds — lives in the
  * domain, so the panel and a chat command cannot disagree about it.
  */
-export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceManager): void {
+export function registerPlayerRoutes(
+  app: FastifyInstance,
+  instances: InstanceManager,
+  cooldowns: CooldownTracker,
+): void {
   /** Every route in this file addresses one bot, so resolving it is factored out. */
   const runtimeOf = (instanceId: string) => {
     const found = instances.get(instanceId);
@@ -44,6 +49,7 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
   app.post('/api/instances/:instanceId/queue', async (request, response) => {
     const { instanceId } = instanceIdParamSchema.parse(request.params);
     const body = trackRequestSchema.parse(request.body);
+    requireCooldown(request, cooldowns, 'queue');
 
     const queued = await runtimeOf(instanceId).playback.request(body, {
       // Attributed to the signed-in panel identity, so history shows who actually queued it
@@ -162,6 +168,7 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
   app.get('/api/instances/:instanceId/search', async (request) => {
     const { instanceId } = instanceIdParamSchema.parse(request.params);
     const { q, limit } = searchQuerySchema.parse(request.query);
+    requireCooldown(request, cooldowns, 'search');
 
     const results = await runtimeOf(instanceId).playback.search(q, limit);
     // A failing search is upstream's fault, not the caller's — 502 says so honestly.

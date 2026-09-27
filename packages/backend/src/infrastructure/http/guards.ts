@@ -2,6 +2,7 @@ import { roleSatisfies, type Role } from '@tsmusic/shared';
 import type { FastifyRequest } from 'fastify';
 
 import { mayTouchInstance, type PanelIdentity } from '../../contexts/access/domain/panel-access.ts';
+import type { CooldownTracker } from '../../contexts/chat/application/cooldown-tracker.ts';
 import { httpError } from './errors.ts';
 
 declare module 'fastify' {
@@ -50,6 +51,34 @@ export function requireInstance(request: FastifyRequest, instanceId: string, req
   if (!mayTouchInstance(identity, instanceId)) {
     throw httpError(404, `no instance '${instanceId}'`);
   }
+}
+
+/**
+ * Same cooldown as the chat's own resolving commands (`RESOLVING_COOLDOWN_MS` in
+ * `command-definition.ts`) — a handful of tokens hammering `/search` or `/queue` spawns just
+ * as many concurrent yt-dlp processes over HTTP as it would from chat.
+ */
+export const RESOLVING_COOLDOWN_MS = 5_000;
+
+/**
+ * Throttles a route that spawns yt-dlp/ffmpeg, mirroring the pacing chat commands already
+ * get from `CooldownTracker`. The HTTP API has no per-message identity to key on, so the
+ * credential's own label stands in for it — coarser than per-uid, but the root/operator
+ * token is meant to be held by one person anyway.
+ */
+export function requireCooldown(
+  request: FastifyRequest,
+  cooldowns: CooldownTracker,
+  route: string,
+  cooldownMs: number = RESOLVING_COOLDOWN_MS,
+): void {
+  const identity = identityOf(request);
+  const key = identity.isRootToken ? 'operator' : identity.label;
+  const remainingMs = cooldowns.remainingMs(key, route, cooldownMs);
+  if (remainingMs > 0) {
+    throw httpError(429, `try again in ${Math.ceil(remainingMs / 1000)}s`);
+  }
+  cooldowns.record(key, route);
 }
 
 interface PolicyRule {

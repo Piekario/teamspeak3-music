@@ -4,9 +4,10 @@ import { z } from 'zod';
 
 import type { PlaylistService } from '../../../contexts/catalog/application/playlist-service.ts';
 import { describePlaylistError } from '../../../contexts/catalog/application/playlist-service.ts';
+import type { CooldownTracker } from '../../../contexts/chat/application/cooldown-tracker.ts';
 import type { InstanceManager } from '../../../contexts/instances/application/instance-manager.ts';
 import { httpError } from '../errors.ts';
-import { identityOf } from '../guards.ts';
+import { identityOf, requireCooldown } from '../guards.ts';
 
 const playlistParamsSchema = instanceIdParamSchema.extend({
   playlistId: z.string().min(1),
@@ -39,7 +40,11 @@ const reorderSchema = z.object({ toIndex: z.number().int().min(0) });
  * TeamSpeak servers have separate audiences and separate defaults, and a flat `/playlists`
  * would invite exactly the mix-up the schema is scoped to prevent.
  */
-export function registerPlaylistRoutes(app: FastifyInstance, instances: InstanceManager): void {
+export function registerPlaylistRoutes(
+  app: FastifyInstance,
+  instances: InstanceManager,
+  cooldowns: CooldownTracker,
+): void {
   const serviceOf = (instanceId: string): PlaylistService => {
     const found = instances.get(instanceId);
     if (!found.ok) throw httpError(404, `no instance '${instanceId}'`);
@@ -110,6 +115,7 @@ export function registerPlaylistRoutes(app: FastifyInstance, instances: Instance
   app.post('/api/instances/:instanceId/playlists/:playlistId/tracks', async (request) => {
     const { instanceId, playlistId } = playlistParamsSchema.parse(request.params);
     const body = addTracksSchema.parse(request.body);
+    requireCooldown(request, cooldowns, 'playlist-add');
     await detailOf(instanceId, playlistId);
 
     const added = await serviceOf(instanceId).addFromUrl(playlistId, body.url);
@@ -141,6 +147,7 @@ export function registerPlaylistRoutes(app: FastifyInstance, instances: Instance
   /** Queues the playlist, exactly as `!playlist load` does from chat. */
   app.post('/api/instances/:instanceId/playlists/:playlistId/load', async (request) => {
     const { instanceId, playlistId } = playlistParamsSchema.parse(request.params);
+    requireCooldown(request, cooldowns, 'playlist-load');
 
     const loaded = await serviceOf(instanceId).load(playlistId, {
       uid: 'panel',
