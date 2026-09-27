@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+This MIT license covers this repository's own code. `services/ts3-gateway` compiles directly
+against `vendor/TS3AudioBot/TSLib` (a git submodule), which is licensed under the Open
+Software License v3.0 — see `vendor/TS3AudioBot/LICENSE`. The built gateway is therefore a
+combined work incorporating OSL-3.0-licensed source, and distributing or deploying it is
+subject to that license's terms, not just this one.
