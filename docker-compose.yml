@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: docker/bot/Dockerfile
-    image: tsmusic/bot:0.1.0
+    image: ghcr.io/piekario/teamspeak3-music/bot:${TAG:-latest}
     container_name: tsmusic-bot
     restart: unless-stopped
     environment:
@@ -62,7 +62,7 @@ services:
     build:
       context: .
       dockerfile: docker/gateway/Dockerfile
-    image: tsmusic/gateway:0.1.0
+    image: ghcr.io/piekario/teamspeak3-music/gateway:${TAG:-latest}
     container_name: tsmusic-gateway
     restart: unless-stopped
     expose:
@@ -79,7 +79,7 @@ services:
     build:
       context: .
       dockerfile: docker/web/Dockerfile
-    image: tsmusic/web:0.1.0
+    image: ghcr.io/piekario/teamspeak3-music/web:${TAG:-latest}
     container_name: tsmusic-web
     restart: unless-stopped
     depends_on:
