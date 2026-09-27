@@ -1,9 +1,10 @@
 {
   "$comment": [
-    "Copy to instances.json (gitignored — it holds ClientQuery API keys) and edit. This is an",
-    "alternative to creating bots through the panel: the backend seeds these on startup if no",
-    "instances exist yet. Bots are fully independent, so two entries may point at completely",
-    "different TeamSpeak servers.",
+    "Copy to instances.json (gitignored — it holds ClientQuery API keys), edit, and set",
+    "INSTANCES_JSON=./instances.json in .env — otherwise docker-compose.yml never mounts it.",
+    "This is an alternative to creating bots through the panel: the backend seeds these on",
+    "startup if no instances exist yet. Bots are fully independent, so two entries may point",
+    "at completely different TeamSpeak servers.",
     "",
     "The clientQuery block is only meaningful when TS3_TRANSPORT=clientquery; the gateway",
     "transport (the default) ignores it but the field is still required by the schema."

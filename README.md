@@ -56,8 +56,9 @@ at completely unrelated TeamSpeak servers. Set the bot's channel to the **Opus M
 at quality 10 on the TeamSpeak server side; on a speech codec the bot sounds muddy no matter
 what else is right.
 
-Instances can also be seeded from a file instead of the panel — see `instances.example.json`
-— which is mainly useful for scripted deployments or the `clientquery` transport.
+Instances can also be seeded from a file instead of the panel: copy `instances.example.json` to
+`instances.json`, edit it, and set `INSTANCES_JSON=./instances.json` in `.env` before bringing
+the stack up. Mainly useful for scripted deployments or the `clientquery` transport.
 
 ## Publishing the panel through a Cloudflare tunnel
 
