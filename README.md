@@ -7,119 +7,57 @@ one backend.
 ## Why it is built this way
 
 TeamSpeak's ServerQuery interface cannot transmit audio, so a music bot needs a *real*
-TeamSpeak client. This project therefore runs the official headless client in a container,
-feeds it a PulseAudio virtual microphone, and pushes audio into that microphone with ffmpeg.
+TeamSpeak client identity. Rather than running the official GUI client in a container per bot
+(amd64-only, needs a virtual display and a PulseAudio sink), every bot's connection is held by
+one gateway process — a small .NET service built on [TSLib](vendor/TS3AudioBot), the library
+behind TS3AudioBot. Control (join, move, chat, notifications) travels as JSON over a
+WebSocket; PCM audio travels separately over a raw TCP socket, one per bot.
 
-Two consequences shape everything else:
+The practical upshot: creating a bot through the panel needs no second container, no VNC
+bootstrap and no manual configuration step — the gateway just opens another connection. The
+gateway image is also multi-arch, since nothing about it is architecture-bound the way the Qt
+client was.
 
-- **The TeamSpeak client is amd64-only.** No arm64 build exists, so on Apple Silicon that one
-  container runs emulated. It is deliberately the *only* emulated service — the bot, and
-  therefore ffmpeg, stays native and reaches PulseAudio over TCP.
-- **Everything goes through ClientQuery, not ServerQuery.** ServerQuery needs a server admin
-  login you will not get on someone else's server, cannot see channel chat without moving its
-  own client, and bans you for exceeding 10 commands per 3 seconds. ClientQuery has none of
-  those problems and speaks as the bot's own identity.
+A ClientQuery-based transport (driving an actual GUI client, as above) still exists in the
+backend as an alternate mode — set `TS3_TRANSPORT=clientquery` — for cases where running a
+real client is preferable, but it is not the default and needs its own container image, which
+this repository no longer builds for you.
 
 ## Requirements
 
-- Docker with **Rosetta** enabled (Docker Desktop → Settings → General → *Use Rosetta for
-  x86/amd64 emulation*). Verify with:
-  ```bash
-  docker run --rm --platform=linux/amd64 debian:bookworm-slim uname -m
-  ```
-  It must print `x86_64` and return in seconds. Tens of seconds means you are on QEMU.
+- Docker.
 - Node 22+ and pnpm, for development.
-
-Docker Desktop keeps its CLI inside the app bundle. If `docker` is not on your PATH:
-```bash
-export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
-```
+- If building the gateway image from source (rather than pulling from GHCR), the TSLib
+  submodule must be checked out:
+  ```bash
+  git submodule update --init --recursive
+  ```
 
 ## Quick start
 
 ```bash
+git submodule update --init --recursive
 cp .env.example .env && sed -i '' "s/^ADMIN_TOKEN=.*/ADMIN_TOKEN=$(openssl rand -hex 32)/" .env
-cp instances.example.json instances.json
+docker compose up -d
 ```
 
-Edit `instances.json` — one entry per bot. Leave `clientQuery.apiKey` as a placeholder for
-now; you will fill it in after the first start.
-
-```bash
-pnpm instances:generate
-docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
-```
-
-## One-time client bootstrap
-
-The bootstrap is automatic. A container started against an empty volume creates its own
-identity, skips both first-run dialogs and connects to the configured server with no
-interaction at all. Two findings from 3.6.2 make that possible:
-
-- **The ClientQuery plugin is enabled by default and generates its own API key**, written to
-  `clientquery.ini` in the config volume.
-- **The licence and promo dialogs are gated by two settings keys**, not by a command-line
-  flag — there is no accept-licence option in the binary. The entrypoint seeds
-  `General.LastShownLicense` and `General.SyncOverviewShown` before the client ever starts.
-  This matters more than it looks: the connect URI is consumed at startup, so a client
-  sitting behind a modal dialog silently never joins the server.
-
-So the only manual step is copying the generated key into your config:
-
-```bash
-scripts/read-apikey.sh party
-```
-
-Put that value into `instances.json` as `clientQuery.apiKey`, then restart the bot service.
-
-The config volume is the **only state in this project that cannot be rebuilt** — it holds the
-identity and the API key. Back it up (see below).
-
-### When you do need the GUI
-
-The audio settings below still have to be set once per instance, and they matter a great
-deal for how the bot sounds. Set `enableVnc: true` for the instance, regenerate, restart,
-then connect a VNC viewer to `127.0.0.1:5900` (macOS: `open vnc://localhost:5900`).
-
-The image runs a window manager (openbox) specifically so this session is usable: Qt refuses
-keyboard focus without one, which makes dialogs impossible to dismiss over VNC.
-
-In the client, set:
-
-| Setting | Value | Why |
-|---|---|---|
-| Capture device | **BotMic** | The virtual microphone fed by ffmpeg |
-| Capture mode | **Continuous transmission** | Voice activation gates out quiet intros |
-| Echo cancellation | **off** | Mangles music |
-| Echo reduction / denoise | **off** | Same |
-| **Automatic voice gain (AGC)** | **off** | Applies its own dynamic gain on top of yours, which makes the volume control feel broken and non-linear |
-
-Also set the bot's channel to the **Opus Music** codec at quality 10 — on a speech codec the
-bot will sound muddy no matter what else is right. That is a server-admin action on the
-channel, not a client setting.
-
-Then back the volume up and turn VNC off again:
-
-```bash
-docker run --rm -v ts3-config-party:/c -v "$PWD":/b alpine tar czf /b/ts3-config-party.tgz -C /c .
-```
-
-Keep that archive somewhere safe and out of git. Restoring it is what makes deploying to a
-new host a one-minute job instead of repeating this section.
+Open the panel (`http://localhost:8081` by default) and sign in with `ADMIN_TOKEN`. Create
+your first bot from there — see **Panel access** below for the token model, and **Adding
+another bot** for what a bot needs.
 
 ## Adding another bot
 
-Add an entry to `instances.json` with a new `id`, then:
+Bots are created and configured entirely through the panel: **Create bot**, fill in the
+TeamSpeak server, port, nickname and an identifier, save. No container, no restart and no
+manual key extraction — the gateway opens the new connection as soon as the bot is enabled.
 
-```bash
-pnpm instances:generate
-docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
-scripts/read-apikey.sh <new-id>
-```
+Bots are fully independent — separate identity, queue and permissions — so two bots may point
+at completely unrelated TeamSpeak servers. Set the bot's channel to the **Opus Music** codec
+at quality 10 on the TeamSpeak server side; on a speech codec the bot sounds muddy no matter
+what else is right.
 
-Bots are fully independent — separate identity, sink, queue and ClientQuery socket — so two
-entries may point at completely unrelated TeamSpeak servers. Budget roughly 300–500 MB of RAM
-per bot: each one is a full emulated Qt application.
+Instances can also be seeded from a file instead of the panel — see `instances.example.json`
+— which is mainly useful for scripted deployments or the `clientquery` transport.
 
 ## Publishing the panel through a Cloudflare tunnel
 
@@ -197,8 +135,6 @@ whoever adds it and much better than an endpoint that is quietly open to everyon
 
 ## Development
 
-## Development
-
 ```bash
 pnpm install
 pnpm -r build
@@ -212,6 +148,11 @@ infrastructure at all. Two consequences for contributors: source files import ea
 properties are not usable** — Node's strip-only mode rejects them, so declare fields
 explicitly.
 
+Running the backend directly with `pnpm dev:backend` (rather than through `docker compose`,
+which sets it explicitly) gets `TS3_TRANSPORT=clientquery`, not `gateway` — that variable's
+own code-level default is `clientquery`; only `docker-compose.yml` overrides it to `gateway`.
+Set it yourself if you're testing the gateway path outside compose.
+
 ## Architecture
 
 Domain-driven, with a one-way dependency rule: the domain knows nothing about Fastify,
@@ -221,7 +162,7 @@ and an adapter implemented in infrastructure.
 ```
 packages/backend/src/
 ├─ contexts/
-│  ├─ instances/   Instance config, ClientQuery client, per-bot runtime
+│  ├─ instances/   Instance config, gateway/ClientQuery transports, per-bot runtime
 │  ├─ playback/    Queue, playback state machine, ffmpeg/yt-dlp/pactl adapters
 │  ├─ access/      Roles, permission resolution
 │  ├─ catalog/     Playlists, play history
@@ -240,25 +181,25 @@ A few decisions worth knowing before changing things:
   and seek comes free.
 - **Identity is the client UID, never the nickname.** Nicknames are changeable; keying
   permissions on them invites impersonation.
-- **Playlists are global; identities, permissions and history are per instance.** Two bots on
-  two servers share no users, but content is worth sharing.
+- **Playlists, identities, permissions and history are all per instance.** A preset is tied to
+  a room's taste and to the server groups allowed to load it; a bot offering another
+  community's playlists would be noise rather than a feature.
 
 ## Troubleshooting
 
-**The client container is healthy but the bot never appears on the server.** The identity or
-the connect settings live in the config volume. Check `docker logs tsmusic-client-<id>`.
+**A bot never appears on the server.** Check `docker logs tsmusic-gateway` — it holds every
+bot's connection, so a bad host, a wrong server password or a rejected identity shows up
+there rather than in the bot service's own log.
 
-**Volume changes feel non-linear or have no effect.** Automatic voice gain is still on in the
-client. See the bootstrap table above.
-
-**The bot is connected and the queue is playing, but nobody hears anything.** Check that the
-bot's output is not muted. TeamSpeak mutes the microphone along with the speakers, so an
-output-muted bot transmits nothing — and it looks perfectly healthy while doing it. The bot
-does not need to be muted: it cannot relay other people's voices because the client plays
-into `bot_void`, a sink whose monitor feeds nothing.
-
-Note that `client_flag_talking` is not a reliable check here — it was observed reading `0`
-while audio was genuinely being transmitted. Trust your ears, or `pactl list sink-inputs`.
+**The bot is connected and the queue is playing, but nobody hears anything (`clientquery`
+transport only).** Check that the bot's output is not muted — TeamSpeak mutes the microphone
+along with the speakers, so an output-muted bot transmits nothing while looking perfectly
+healthy. The client plays into `bot_void`, a sink whose monitor feeds nothing, so the bot
+cannot relay other people's voices even unmuted. Note that `client_flag_talking` is not a
+reliable check here — it was observed reading `0` while audio was genuinely being
+transmitted; trust your ears, or `pactl list sink-inputs`. This whole class of problem does
+not exist on the `gateway` transport: muting is a no-op there, correctly, since a TSLib bot
+has no speakers to mute in the first place.
 
 **"That one is 18+".** YouTube serves age-restricted videos only to a signed-in account that
 has been age-verified, and there is no way around that from an anonymous client — not a
@@ -302,7 +243,7 @@ Three levers, strongest first:
 |---|---|---|
 | Egress proxy | `YTDLP_PROXY=socks5://host:1080` | Most effective, no account involved. Needs a proxy whose IP YouTube trusts — a residential/mobile proxy, or a tunnel back to a connection that already works. All audio traffic flows through it, so bandwidth and latency are real considerations. |
 | Cookies | `YTDLP_COOKIES_FILE=/data/cookies.txt` | Very effective. Ties a Google account to the bot, and that account can be rate-limited or banned for this pattern — use one you are willing to lose, never your main. Cookies expire and need re-exporting. |
-| PO tokens | `YTDLP_POT_PROVIDER_URL` | Helps, guarantees nothing. The provider's own README says a PO token "may help your traffic seem more legitimate" — it is a supplement to the two above, not a substitute. |
+| PO tokens | `YTDLP_POT_PROVIDER_URL` | Helps, guarantees nothing. No provider is bundled — point this at one you run yourself. Its own README describes a PO token as something that "may help your traffic seem more legitimate" — a supplement to the two levers above, not a substitute. |
 
 A WireGuard tunnel from the server back to a connection that already works is the usual way
 to get a trusted egress without paying for a proxy service. Point `YTDLP_PROXY` at a local
@@ -312,15 +253,7 @@ None of these is permanent. Treat a working setup as something to monitor, not s
 finish — which is why yt-dlp lives in a volume and every lever is an environment variable
 rather than a rebuild.
 
-**A build of the client image appears to hang for many minutes.** The installer asks for
-licence acceptance on stdin and will loop forever without it. The Dockerfile pipes `yes` into
-it; if you edit that line, keep the pipe.
-
-**The container is healthy but the bot never joins, and the log stops after "Collecting
-autoconnect bookmarks".** A modal dialog is blocking the client. The connect URI is consumed
-at startup, so it will never retry on its own. Check with
-`docker exec -e DISPLAY=:99 <container> xdotool search --name "." getwindowname %@`.
-
-**After a `docker restart` the bot is dead and the log says `could not connect to display
-:99`.** A stale X lock survived the restart. The entrypoint clears it; if you edit that
-block, keep it, or every restart under `restart: unless-stopped` will kill the bot for good.
+The three issues above (client image build hangs, a modal dialog blocking the client, a stale
+X lock after restart) were specific to the removed `docker/ts3-client` GUI-client image used
+by the `clientquery` transport's per-bot containers. That image is no longer built by this
+repository; running `clientquery` today means supplying your own client container.

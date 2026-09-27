@@ -1,6 +1,6 @@
 # Development overrides.
 #
-#   docker compose -f docker-compose.yml -f docker-compose.instances.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #
 # Adds a local TeamSpeak server to develop against, and opens the ports that production
 # deliberately keeps closed.
@@ -25,7 +25,6 @@ services:
   bot:
     environment:
       LOG_LEVEL: debug
-    # Reach the client containers' ClientQuery and PulseAudio from the host while debugging.
     ports:
       - "8080:8080"
 

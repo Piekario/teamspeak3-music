@@ -1,13 +1,9 @@
-# Base stack: the bot, the PO-token provider and the web UI.
+# Base stack: the bot, the gateway and the web UI. Bring it up with:
 #
-# The per-bot TeamSpeak client containers live in docker-compose.instances.yml, generated
-# from instances.json by `pnpm instances:generate`. Bring the whole thing up with:
+#   docker compose up -d
 #
-#   docker compose -f docker-compose.yml -f docker-compose.instances.yml up -d
-#
-# The architectural split that matters: only the TeamSpeak client containers are emulated
-# (linux/amd64, no arm64 build exists). The bot — and therefore ffmpeg — stays native and
-# reaches each client's PulseAudio over TCP.
+# Every bot's TeamSpeak connection is held by the gateway service (one .NET/TSLib process),
+# so creating a bot through the panel needs no second container and no manual bootstrap step.
 
 services:
   bot:
@@ -70,10 +66,6 @@ services:
       - "8477"
     networks:
       - tsmusic
-
-  # Supplies PO tokens to yt-dlp. Datacenter IPs get challenged by YouTube; this reduces
-  # how often, though nothing eliminates it — cookies remain the stronger lever.
-
 
   web:
     build:

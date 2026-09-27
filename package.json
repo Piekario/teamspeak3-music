@@ -13,7 +13,6 @@
     "typecheck": "tsc -b --pretty",
     "dev:backend": "pnpm --filter @tsmusic/backend dev",
     "dev:frontend": "pnpm --filter @tsmusic/frontend dev",
-    "instances:generate": "node scripts/gen-instances.mjs",
     "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo"
   },
   "devDependencies": {

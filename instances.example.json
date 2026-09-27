@@ -1,13 +1,12 @@
 {
   "$comment": [
-    "Copy to instances.json (gitignored — it holds ClientQuery API keys), edit, then run:",
-    "  pnpm instances:generate && docker compose up -d",
+    "Copy to instances.json (gitignored — it holds ClientQuery API keys) and edit. This is an",
+    "alternative to creating bots through the panel: the backend seeds these on startup if no",
+    "instances exist yet. Bots are fully independent, so two entries may point at completely",
+    "different TeamSpeak servers.",
     "",
-    "Each entry becomes its own ts3-client container: its own TeamSpeak identity, its own",
-    "PulseAudio sink and its own ClientQuery socket. Bots are fully independent, so two",
-    "entries may point at completely different TeamSpeak servers.",
-    "",
-    "apiKey is obtained once per instance through the VNC bootstrap — see README."
+    "The clientQuery block is only meaningful when TS3_TRANSPORT=clientquery; the gateway",
+    "transport (the default) ignores it but the field is still required by the schema."
   ],
   "instances": [
     {
