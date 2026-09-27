@@ -112,6 +112,13 @@ function ensureSchema(connection: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS playlist_tracks_playlist
       ON playlist_tracks (playlist_id, position);
+
+    CREATE TABLE IF NOT EXISTS queue_snapshots (
+      instance_id TEXT NOT NULL REFERENCES instances(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (instance_id, position)
+    );
   `);
 
   // Databases created before the column existed still have to gain it, or every instance

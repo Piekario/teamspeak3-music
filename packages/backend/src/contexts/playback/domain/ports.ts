@@ -1,4 +1,4 @@
-import type { Track } from '@tsmusic/shared';
+import type { QueueItem, Track } from '@tsmusic/shared';
 
 import type { Result } from '../../../shared-kernel/result.ts';
 import type { Volume } from './values.ts';
@@ -21,6 +21,11 @@ export interface ResolvedTrack {
    * which would make `!seek` impossible and cost ffmpeg its ability to reconnect.
    */
   readonly streamUrl: string;
+  /**
+   * Headers yt-dlp extracted, such as User-Agent. Required by sources like YouTube
+   * which check if the streaming client uses the same headers as the extractor.
+   */
+  readonly httpHeaders?: Record<string, string> | undefined;
   /**
    * Media URLs are time-limited and bound to the requesting IP. A queued item may go stale
    * before it ever plays, so the service re-resolves lazily when this has passed.
@@ -98,6 +103,7 @@ export interface AudioPlaybackHandle {
 
 export interface StartPlaybackOptions {
   readonly streamUrl: string;
+  readonly httpHeaders?: Record<string, string> | undefined;
   readonly startAtSec: number;
   /** Resolves when the stream ends, one way or another. */
   readonly onEnded: (reason: PlaybackEndReason) => void;
@@ -131,3 +137,15 @@ export type VolumeControlError = {
   readonly kind: 'volume/control-failed';
   readonly detail: string;
 };
+
+// ─── queue persistence ───────────────────────────────────────────────────────
+
+/**
+ * A write-behind mirror of the live queue, so a container restart mid-party restores what
+ * was lined up instead of losing it. Whole-queue replace rather than incremental updates: a
+ * move, a shuffle or a clear touches every position at once, so there is nothing to diff.
+ */
+export interface QueueRepository {
+  load(instanceId: string): Promise<readonly QueueItem[]>;
+  save(instanceId: string, items: readonly QueueItem[]): Promise<void>;
+}

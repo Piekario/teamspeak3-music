@@ -1,4 +1,4 @@
-import type { InstanceSummary, PlayerState, RepeatMode, Role, Track } from '@tsmusic/shared';
+import type { ChannelRef, InstanceSummary, PlayerState, RepeatMode, Role, Track } from '@tsmusic/shared';
 
 /**
  * The REST client.
@@ -199,6 +199,12 @@ export const api = {
   getInstance: (instanceId: string) =>
     request<InstanceDetail>(`/api/instances/${encodeURIComponent(instanceId)}`),
 
+  /** Only answerable while the bot is connected — it asks the TeamSpeak server directly. */
+  listChannels: (instanceId: string) =>
+    request<{ channels: ChannelRef[] }>(
+      `/api/instances/${encodeURIComponent(instanceId)}/channels`,
+    ),
+
   updateInstance: (instanceId: string, body: UpdateInstanceBody) =>
     request<void>(`/api/instances/${encodeURIComponent(instanceId)}`, {
       method: 'PATCH',
@@ -283,7 +289,7 @@ export const api = {
   loadPlaylist: (instanceId: string, playlistId: string) =>
     request<{ queued: number; rejected: number }>(
       `/api/instances/${encodeURIComponent(instanceId)}/playlists/${encodeURIComponent(playlistId)}/load`,
-      { method: 'POST', body: JSON.stringify({ requestedBy: 'the panel' }) },
+      { method: 'POST' },
     ),
 
   deleteInstance: (instanceId: string) =>

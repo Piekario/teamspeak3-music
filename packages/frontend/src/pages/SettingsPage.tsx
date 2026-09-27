@@ -110,6 +110,14 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
     queryFn: () => api.getInstance(instanceId),
   });
 
+  // The server only answers this while the bot is actually connected to it, so there is no
+  // point asking otherwise — the field just falls back to plain free text.
+  const channels = useQuery({
+    queryKey: ['instance', instanceId, 'channels'],
+    queryFn: () => api.listChannels(instanceId),
+    enabled: connected,
+  });
+
   const [form, setForm] = useState<InstanceDetail | null>(null);
   const [channelPassword, setChannelPassword] = useState('');
   const [serverPassword, setServerPassword] = useState('');
@@ -324,10 +332,16 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
           <Field
             id="settings-channel"
             label="Channel name"
-            hint="Leave empty to stay wherever the server puts it."
+            hint={
+              connected
+                ? 'Pick one from the list, or type a name — it does not have to exist yet.'
+                : 'Leave empty to stay wherever the server puts it. Connect the bot to pick from its channel list.'
+            }
           >
             <Input
               id="settings-channel"
+              list="settings-channel-options"
+              autoComplete="off"
               value={form.teamspeak.channel ?? ''}
               placeholder="Music"
               onChange={(event) =>
@@ -340,6 +354,11 @@ export function SettingsPage({ instanceId, onDeleted }: SettingsPageProps) {
                 })
               }
             />
+            <datalist id="settings-channel-options">
+              {(channels.data?.channels ?? []).map((channel) => (
+                <option key={channel.id} value={channel.name} />
+              ))}
+            </datalist>
           </Field>
 
           <Field

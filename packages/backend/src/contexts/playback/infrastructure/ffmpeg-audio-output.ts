@@ -56,6 +56,7 @@ export class FfmpegAudioOutput implements AudioOutput {
     const args = this.#buildArguments(options);
     this.#options.logger.debug('spawning ffmpeg', {
       startAtSec: options.startAtSec,
+      headersKeys: options.httpHeaders ? Object.keys(options.httpHeaders) : undefined,
       sink: this.#options.sinkName,
     });
 
@@ -103,6 +104,24 @@ export class FfmpegAudioOutput implements AudioOutput {
     // Input-side seek: placed before -i so ffmpeg jumps rather than decoding and discarding.
     if (options.startAtSec > 0) {
       args.push('-ss', options.startAtSec.toFixed(3));
+    }
+
+    if (options.httpHeaders !== undefined) {
+      const userAgent =
+        options.httpHeaders['User-Agent'] ?? options.httpHeaders['user-agent'];
+      if (userAgent !== undefined) {
+        args.push('-user_agent', userAgent);
+      }
+
+      const headerString = Object.entries(options.httpHeaders)
+        // ffmpeg has a dedicated option for User-Agent; passing it in -headers is often ignored.
+        .filter(([key]) => key.toLowerCase() !== 'user-agent')
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\r\n') + '\r\n';
+      
+      if (headerString.trim().length > 0) {
+        args.push('-headers', headerString);
+      }
     }
 
     args.push('-i', options.streamUrl);

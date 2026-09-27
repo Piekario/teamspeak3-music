@@ -53,8 +53,8 @@ export class PcmStreamAudioOutput implements AudioOutput {
 
     const args = this.#buildArguments(options);
     this.#options.logger.debug('spawning ffmpeg for gateway ingest', {
-      botId: this.#options.botId,
       startAtSec: options.startAtSec,
+      headersKeys: options.httpHeaders ? Object.keys(options.httpHeaders) : undefined,
     });
 
     let child: ChildProcess;
@@ -130,7 +130,26 @@ export class PcmStreamAudioOutput implements AudioOutput {
     // Before `-i`, where it belongs: `-re` is an input option, and ffmpeg 7 rejects it after
     // the input with "Error opening output files: Invalid argument" — which names the output
     // and says nothing about the option that is actually wrong.
-    args.push('-re', '-i', options.streamUrl);
+    args.push('-re');
+
+    if (options.httpHeaders !== undefined) {
+      const userAgent =
+        options.httpHeaders['User-Agent'] ?? options.httpHeaders['user-agent'];
+      if (userAgent !== undefined) {
+        args.push('-user_agent', userAgent);
+      }
+
+      const headerString = Object.entries(options.httpHeaders)
+        .filter(([key]) => key.toLowerCase() !== 'user-agent')
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\r\n') + '\r\n';
+        
+      if (headerString.trim().length > 0) {
+        args.push('-headers', headerString);
+      }
+    }
+
+    args.push('-i', options.streamUrl);
 
     // 48 kHz stereo s16le: what Opus wants and what the gateway's encoder expects.
     args.push('-vn', '-af', 'aresample=async=1:first_pts=0', '-ac', '2', '-ar', '48000');

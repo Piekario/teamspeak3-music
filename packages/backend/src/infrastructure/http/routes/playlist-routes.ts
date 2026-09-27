@@ -6,6 +6,7 @@ import type { PlaylistService } from '../../../contexts/catalog/application/play
 import { describePlaylistError } from '../../../contexts/catalog/application/playlist-service.ts';
 import type { InstanceManager } from '../../../contexts/instances/application/instance-manager.ts';
 import { httpError } from '../errors.ts';
+import { identityOf } from '../guards.ts';
 
 const playlistParamsSchema = instanceIdParamSchema.extend({
   playlistId: z.string().min(1),
@@ -30,10 +31,6 @@ const updateSchema = z
 const addTracksSchema = z.object({ url: z.string().min(1) });
 
 const reorderSchema = z.object({ toIndex: z.number().int().min(0) });
-
-const loadSchema = z.object({
-  requestedBy: z.string().max(60).default('the panel'),
-});
 
 /**
  * Playlist routes.
@@ -144,11 +141,10 @@ export function registerPlaylistRoutes(app: FastifyInstance, instances: Instance
   /** Queues the playlist, exactly as `!playlist load` does from chat. */
   app.post('/api/instances/:instanceId/playlists/:playlistId/load', async (request) => {
     const { instanceId, playlistId } = playlistParamsSchema.parse(request.params);
-    const { requestedBy } = loadSchema.parse(request.body ?? {});
 
     const loaded = await serviceOf(instanceId).load(playlistId, {
       uid: 'panel',
-      nickname: requestedBy,
+      nickname: identityOf(request).label,
     });
     if (!loaded.ok) throw httpError(422, describePlaylistError(loaded.error), loaded.error);
 

@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import type { InstanceManager } from '../../../contexts/instances/application/instance-manager.ts';
 import { Volume } from '../../../contexts/playback/domain/values.ts';
 import { httpError } from '../errors.ts';
+import { identityOf } from '../guards.ts';
 
 /**
  * Playback routes.
@@ -45,10 +46,10 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
     const body = trackRequestSchema.parse(request.body);
 
     const queued = await runtimeOf(instanceId).playback.request(body, {
-      // Panel actions are attributed to the operator, so history distinguishes them from
-      // tracks somebody requested in chat.
+      // Attributed to the signed-in panel identity, so history shows who actually queued it
+      // rather than the panel as an undifferentiated whole.
       uid: 'panel',
-      nickname: 'Web panel',
+      nickname: identityOf(request).label,
     });
 
     if (!queued.ok) throw httpError(422, describe(queued.error), queued.error);
@@ -80,7 +81,7 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
 
     const imported = await runtimeOf(instanceId).playback.requestPlaylist(
       url,
-      { uid: 'panel', nickname: 'Web panel' },
+      { uid: 'panel', nickname: identityOf(request).label },
       limit,
     );
 

@@ -18,7 +18,7 @@ import { PendingSearches } from '../../chat/application/pending-searches.ts';
 import { CommandRegistry } from '../../chat/domain/command-definition.ts';
 import { PlaybackService } from '../../playback/application/playback-service.ts';
 import { PlaybackSession } from '../../playback/domain/playback-session.ts';
-import type { TrackResolver, VolumeController } from '../../playback/domain/ports.ts';
+import type { QueueRepository, TrackResolver, VolumeController } from '../../playback/domain/ports.ts';
 import { Queue } from '../../playback/domain/queue.ts';
 import { Volume } from '../../playback/domain/values.ts';
 import type { BotClient } from '../domain/bot-client.ts';
@@ -53,6 +53,11 @@ export interface InstanceRuntimeDependencies {
    * commands and the default that refills an exhausted queue.
    */
   readonly playlists?: PlaylistRepository | undefined;
+  /**
+   * Write-behind queue storage. Optional: an instance can run without it, losing only queue
+   * durability across a restart.
+   */
+  readonly queues?: QueueRepository | undefined;
   readonly webUrl?: string | undefined;
   readonly logger: RuntimeLogger;
   readonly onIdentitySeen?: (instanceId: string, uid: string, nickname: string) => void;
@@ -158,6 +163,7 @@ export class InstanceRuntime {
       events: deps.events,
       clock: deps.clock,
       logger: deps.logger,
+      queueRepository: deps.queues,
       // Lazy: the playlist service needs the playback service that is being built here.
       onQueueExhausted: async () => {
         await this.#refillFromDefaultPlaylist();

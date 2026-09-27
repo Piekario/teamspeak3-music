@@ -10,7 +10,9 @@ import type {
   AudioOutputError,
   AudioPlaybackHandle,
   PlaybackEndReason,
+  QueueRepository,
   ResolveError,
+  ResolvedTrack,
   TrackResolver,
   VolumeController,
 } from '../domain/ports.ts';
@@ -47,6 +49,11 @@ export interface PlaybackServiceOptions {
   readonly audio: AudioOutput;
   readonly volume: VolumeController;
   readonly events: EventPublisher;
+  /**
+   * Write-behind queue storage. Optional: an instance can run without it, losing only queue
+   * durability across a restart — everything else works the same.
+   */
+  readonly queueRepository?: QueueRepository | undefined;
   /**
    * Called when the queue has run dry and playback has gone idle.
    *
@@ -311,6 +318,11 @@ export class PlaybackService {
 
   // ─── queue management ─────────────────────────────────────────────────────
 
+  /** Loads a persisted queue after a restart. Called once, before anything else touches it. */
+  restoreQueue(items: readonly QueueItem[]): void {
+    this.#options.queue.restore(items);
+  }
+
   removeFromQueue(itemId: string, requestedBy?: ClientUid): Result<void, QueueMutationError> {
     const removed = this.#options.queue.remove(itemId, requestedBy);
     if (!removed.ok) return removed;
@@ -441,11 +453,12 @@ export class PlaybackService {
     track: Track,
     fromSec: number,
   ): Promise<Result<void, { readonly detail: string }>> {
-    const stream = await this.#freshStreamUrl(track);
+    const stream = await this.#freshStream(track);
     if (!stream.ok) return err({ detail: describeResolveError(stream.error) });
 
     const audio = await this.#options.audio.start({
-      streamUrl: stream.value,
+      streamUrl: stream.value.streamUrl,
+      httpHeaders: stream.value.httpHeaders,
       startAtSec: fromSec,
       onEnded: (reason) => {
         void this.#onPlaybackEnded(reason);
@@ -461,14 +474,13 @@ export class PlaybackService {
    * Media URLs expire, and a track can sit in the queue for longer than its URL lives, so
    * the stream URL is always fetched at the moment of playback rather than at enqueue time.
    */
-  async #freshStreamUrl(track: Track): Promise<Result<string, ResolveError>> {
+  async #freshStream(track: Track): Promise<Result<ResolvedTrack, ResolveError>> {
     const resolver = this.#options.resolvers.find((candidate) => candidate.supports(track.url));
     if (resolver === undefined) {
       return err({ kind: 'resolve/unsupported-url', url: track.url });
     }
 
-    const resolved = await resolver.refresh(track);
-    return resolved.ok ? ok(resolved.value.streamUrl) : resolved;
+    return resolver.refresh(track);
   }
 
   async #onPlaybackEnded(reason: PlaybackEndReason): Promise<void> {
@@ -547,6 +559,19 @@ export class PlaybackService {
     this.#options.events.publish(
       this.#envelope({ type: 'queue.changed', payload: { queue: this.#options.queue.items } }),
     );
+    this.#persistQueue();
+  }
+
+  /** Fire-and-forget: a slow or failing write must never block playback or an HTTP response. */
+  #persistQueue(): void {
+    const repository = this.#options.queueRepository;
+    if (repository === undefined) return;
+
+    void repository.save(this.#options.instanceId, this.#options.queue.items).catch((error: unknown) => {
+      this.#options.logger.warn('failed to persist the queue snapshot', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   #publishTrackEnded(item: QueueItem, reason: TrackEndReason): void {

@@ -147,6 +147,8 @@ export class YtDlpResolver implements TrackResolver {
       '--no-warnings',
       '--no-progress',
       '--ignore-config',
+      '--js-runtimes',
+      'node',
       '-f',
       'bestaudio[acodec=opus]/bestaudio/best',
     ];
@@ -299,6 +301,7 @@ interface YtDlpEntry {
   readonly live_status?: string;
   readonly entries?: readonly YtDlpEntry[];
   readonly requested_downloads?: readonly { readonly url?: string }[];
+  readonly http_headers?: Record<string, string>;
 }
 
 function firstEntry(payload: unknown): YtDlpEntry | undefined {
@@ -339,6 +342,7 @@ function toResolvedTrack(entry: YtDlpEntry): Result<ResolvedTrack, ResolveError>
   return ok({
     track: toTrack(entry),
     streamUrl,
+    httpHeaders: entry.http_headers,
     expiresAt: expiryOf(streamUrl),
   });
 }

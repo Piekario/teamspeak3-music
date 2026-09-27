@@ -3,6 +3,7 @@ import { openDatabase } from './infrastructure/persistence/database.ts';
 import { DrizzleInstanceRepository } from './infrastructure/persistence/drizzle-instance-repository.ts';
 import { DrizzlePlaylistRepository } from './infrastructure/persistence/drizzle-playlist-repository.ts';
 import { DrizzlePanelTokenRepository } from './infrastructure/persistence/drizzle-panel-token-repository.ts';
+import { DrizzleQueueRepository } from './infrastructure/persistence/drizzle-queue-repository.ts';
 import { GatewayConnection } from './contexts/instances/infrastructure/gateway/gateway-connection.ts';
 import { buildTransport } from './composition/create-transport.ts';
 import { YtDlpResolver } from './contexts/playback/infrastructure/ytdlp-resolver.ts';
@@ -74,6 +75,7 @@ async function main(): Promise<void> {
   );
   const playlistRepository = new DrizzlePlaylistRepository(db);
   const panelTokenRepository = new DrizzlePanelTokenRepository(db);
+  const queueRepository = new DrizzleQueueRepository(db);
 
   /**
    * Identities are cached in memory and written through to storage.
@@ -111,6 +113,7 @@ async function main(): Promise<void> {
     proxy: config.YTDLP_PROXY,
     webUrl: config.WEB_URL,
     playlists: playlistRepository,
+    queues: queueRepository,
     logger: scopedLogger(logger, { component: 'instance' }),
     buildTransport: (instanceConfig, onReady) =>
       buildTransport(
@@ -159,6 +162,9 @@ async function main(): Promise<void> {
       scoped.error('duplicate instance id', { id: instanceConfig.id });
       process.exit(1);
     }
+
+    const persistedQueue = await queueRepository.load(instanceConfig.id);
+    if (persistedQueue.length > 0) added.value.playback.restoreQueue(persistedQueue);
   }
 
   if (instances.ids.length === 0) {

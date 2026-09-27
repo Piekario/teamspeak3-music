@@ -29,7 +29,7 @@ services:
       # of a file that is not there. The container path is fixed; the host path is yours.
       YTDLP_COOKIES_FILE: "${YTDLP_COOKIES_FILE:+/config/cookies.txt}"
       YTDLP_PROXY: "${YTDLP_PROXY:-}"
-      YTDLP_POT_PROVIDER_URL: http://pot-provider:4416
+      YTDLP_EXTRACTOR_ARGS: "youtube:player_client=android"
       FFMPEG_BINARY: ffmpeg
       PACTL_BINARY: pactl
       # Which way the bots reach TeamSpeak. `gateway` holds every bot in one process and
@@ -73,15 +73,7 @@ services:
 
   # Supplies PO tokens to yt-dlp. Datacenter IPs get challenged by YouTube; this reduces
   # how often, though nothing eliminates it — cookies remain the stronger lever.
-  pot-provider:
-    image: brainicism/bgutil-ytdlp-pot-provider:latest
-    container_name: tsmusic-pot-provider
-    init: true
-    restart: unless-stopped
-    expose:
-      - "4416"
-    networks:
-      - tsmusic
+
 
   web:
     build:
