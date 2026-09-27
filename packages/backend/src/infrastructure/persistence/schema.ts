@@ -5,8 +5,8 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
  *
  * The scoping rule runs through everything here: anything that belongs to a *server* is
  * keyed by `instanceId`, because two bots on two TeamSpeak servers share no identities, no
- * server groups and no sensible history. Playlists are the deliberate exception — a playlist
- * is content, not a server, so it is shared and any bot can load it.
+ * server groups and no sensible history. That includes playlists — a preset is tied to a
+ * room's taste, so it belongs to the instance rather than being shared across bots.
  */
 
 /**
