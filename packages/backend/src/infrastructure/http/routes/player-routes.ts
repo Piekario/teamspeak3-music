@@ -60,7 +60,8 @@ export function registerPlayerRoutes(app: FastifyInstance, instances: InstanceMa
     const { instanceId } = instanceIdParamSchema.parse(request.params);
     const { itemId } = request.params as { itemId: string };
 
-    // No requester restriction: reaching this route already required the admin token.
+    // No requester restriction: the `user` role (guards.ts POLICY) may remove any queued
+    // item, not just their own.
     const removed = runtimeOf(instanceId).playback.removeFromQueue(itemId);
     if (!removed.ok) throw httpError(404, describe(removed.error), removed.error);
     return response.status(204).send();
