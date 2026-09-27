@@ -98,6 +98,29 @@ describe('WebSocketHub broadcasting', () => {
     const hub = new WebSocketHub(silentLogger);
     assert.doesNotThrow(() => hub.broadcast(event('party')));
   });
+
+  it('withholds another instance\'s events from a scoped client', () => {
+    const hub = new WebSocketHub(silentLogger);
+    const scoped = new FakeSocket();
+    const unscoped = new FakeSocket();
+    hub.add(scoped, 'party');
+    hub.add(unscoped, null);
+
+    hub.broadcast(event('chill'));
+
+    assert.equal(scoped.events.length, 0, 'a credential scoped to another bot sees nothing');
+    assert.equal(unscoped.events.length, 1);
+  });
+
+  it('still delivers events for the scoped client\'s own instance', () => {
+    const hub = new WebSocketHub(silentLogger);
+    const scoped = new FakeSocket();
+    hub.add(scoped, 'party');
+
+    hub.broadcast(event('party'));
+
+    assert.equal(scoped.events.length, 1);
+  });
 });
 
 describe('WebSocketHub bus integration', () => {

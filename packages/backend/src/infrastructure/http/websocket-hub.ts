@@ -23,7 +23,8 @@ const OPEN = 1;
  * instance switcher is then a filter over an existing stream rather than a reconnect.
  */
 export class WebSocketHub {
-  readonly #clients = new Set<WebSocketLike>();
+  /** Value is the credential's instance scope: null means every bot, as in `PanelIdentity`. */
+  readonly #clients = new Map<WebSocketLike, string | null>();
   readonly #logger: ScopedLogger;
   #unsubscribe: Unsubscribe | undefined;
 
@@ -45,8 +46,9 @@ export class WebSocketHub {
     return this.#clients.size;
   }
 
-  add(socket: WebSocketLike): void {
-    this.#clients.add(socket);
+  /** `scope` is the credential's `instanceId`: null (the default) sees every bot. */
+  add(socket: WebSocketLike, scope: string | null = null): void {
+    this.#clients.set(socket, scope);
   }
 
   remove(socket: WebSocketLike): void {
@@ -54,19 +56,20 @@ export class WebSocketHub {
   }
 
   /**
-   * Sends to every open client. A socket that fails to accept a write is dropped rather
-   * than retried: one wedged browser tab must never slow down playback, and the client
-   * reconnects and resynchronises on its own.
+   * Sends to every open client whose scope covers the event's instance. A socket that fails
+   * to accept a write is dropped rather than retried: one wedged browser tab must never slow
+   * down playback, and the client reconnects and resynchronises on its own.
    */
   broadcast(event: AppEvent): void {
     if (this.#clients.size === 0) return;
 
     const payload = JSON.stringify(event);
-    for (const client of this.#clients) {
+    for (const [client, scope] of this.#clients) {
       if (client.readyState !== OPEN) {
         this.#clients.delete(client);
         continue;
       }
+      if (scope !== null && scope !== event.instanceId) continue;
       try {
         client.send(payload);
       } catch (error) {
@@ -92,7 +95,7 @@ export class WebSocketHub {
   }
 
   closeAll(): void {
-    for (const client of this.#clients) {
+    for (const client of this.#clients.keys()) {
       try {
         client.close(1001, 'server shutting down');
       } catch {

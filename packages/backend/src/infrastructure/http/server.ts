@@ -190,9 +190,10 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
     });
   }
 
-  app.get('/ws', { websocket: true }, (socket) => {
+  app.get('/ws', { websocket: true }, (socket, request) => {
     const client = socket as unknown as WebSocketLike;
-    hub.add(client);
+    const scope = request.identity?.instanceId ?? null;
+    hub.add(client, scope);
 
     // Push a full snapshot immediately, so the panel never renders an empty shell while it
     // waits for something to happen.
@@ -202,9 +203,12 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
     // them as disconnected — with all controls disabled — until something happened to change
     // it, which on a healthy system could be hours.
     const at = options.clock.now().toISOString();
+    const visible = options.instances.all.filter(
+      (runtime) => scope === null || scope === runtime.id,
+    );
     hub.sendTo(
       client,
-      options.instances.all.flatMap((runtime) => [
+      visible.flatMap((runtime) => [
         {
           type: 'instance.status' as const,
           instanceId: runtime.id,
