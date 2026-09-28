@@ -1,0 +1,62 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: check the README's **Troubleshooting** section — the "no audio",
+        age-restricted video, yt-dlp breakage, and datacenter-IP issues are all covered there
+        and aren't bugs in this project.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you expected instead, too.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - gateway (default)
+        - clientquery
+        - not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Image tag / commit
+      description: e.g. `latest`, a `ghcr.io/piekario/teamspeak3-music/*` tag, or a commit SHA if built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        `docker logs tsmusic-gateway` and/or `docker logs tsmusic-bot`. Redact your
+        `ADMIN_TOKEN`, server hostnames, or anything else you'd rather not post publicly.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Deployment setup (bare Docker, Cloudflare tunnel, reverse proxy, ...), OS/arch, etc.
